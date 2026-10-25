@@ -4,14 +4,14 @@
  * Puskesmas Kepulauan Seribu Selatan
  */
 
-$requestUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 
 // 1. Tangani permintaan aset statis (/assets/...)
 if (strpos($requestUri, '/assets/') !== false) {
     $assetName = substr($requestUri, strpos($requestUri, '/assets/') + 8);
-    $assetFile = __DIR__ . '/dist/assets/' . $assetName;
+    $assetFile = __DIR__ . '/assets/' . $assetName;
     if (!file_exists($assetFile)) {
-        $assetFile = __DIR__ . '/assets/' . $assetName;
+        $assetFile = __DIR__ . '/dist/assets/' . $assetName;
     }
     
     if (file_exists($assetFile)) {
@@ -33,7 +33,7 @@ if (strpos($requestUri, '/assets/') !== false) {
     }
 }
 
-// 2. Jika ada build produksi di folder dist, sajikan dist/index.html
+// 2. Jika ada file dist/index.html fisik, sajikan langsung
 if (file_exists(__DIR__ . '/dist/index.html')) {
     header('Content-Type: text/html; charset=utf-8');
     header('Cache-Control: no-cache, no-store, must-revalidate');
@@ -41,12 +41,53 @@ if (file_exists(__DIR__ . '/dist/index.html')) {
     exit;
 }
 
-// 3. Fallback jika dist belum ada
-if (file_exists(__DIR__ . '/index.html')) {
-    header('Content-Type: text/html; charset=utf-8');
-    readfile(__DIR__ . '/index.html');
-    exit;
+// 3. Cari file bundle JavaScript dan CSS di folder assets/
+$jsFile = '';
+$cssFile = '';
+
+$searchDirs = [__DIR__ . '/assets', __DIR__ . '/dist/assets'];
+foreach ($searchDirs as $dir) {
+    if (is_dir($dir)) {
+        $files = scandir($dir);
+        foreach ($files as $file) {
+            if (empty($jsFile) && preg_match('/^index-.*\.js$/', $file)) {
+                $jsFile = '/assets/' . $file;
+            }
+            if (empty($cssFile) && preg_match('/^index-.*\.css$/', $file)) {
+                $cssFile = '/assets/' . $file;
+            }
+        }
+    }
 }
 
-echo "Aplikasi DERMAGA GIZI sedang memuat...";
+// 4. Sajikan HTML Produksi Siap Pakai Langsung ke Browser!
+header('Content-Type: text/html; charset=utf-8');
+header('Cache-Control: no-cache, no-store, must-revalidate');
 ?>
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DERMAGA GIZI - Puskesmas Kepulauan Seribu Selatan</title>
+    <meta name="description" content="Dashboard Elektronik Rekap, Monitoring, dan Analisis Gizi Balita - Puskesmas Kepulauan Seribu Selatan" />
+    <meta property="og:title" content="DERMAGA GIZI - Puskesmas Kepulauan Seribu Selatan" />
+    <meta property="og:description" content="Sistem Monitoring, Intervensi, dan Evaluasi Balita Bermasalah Gizi Puskesmas Kepulauan Seribu Selatan" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <?php if ($cssFile): ?>
+    <link rel="stylesheet" crossorigin href="<?= htmlspecialchars($cssFile) ?>">
+    <?php endif; ?>
+    <?php if ($jsFile): ?>
+    <script type="module" crossorigin src="<?= htmlspecialchars($jsFile) ?>"></script>
+    <?php endif; ?>
+  </head>
+  <body class="bg-slate-50 text-slate-800 antialiased selection:bg-sky-500 selection:text-white">
+    <div id="root"></div>
+  </body>
+</html>
+<?php exit; ?>

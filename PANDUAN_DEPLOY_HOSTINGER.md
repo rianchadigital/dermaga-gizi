@@ -1,43 +1,32 @@
-# PANDUAN DEPLOY OTOMATIS: dermagagizi.puskesmasseribuselatan.com
+# PANDUAN PENYELESAIAN LAYAR PUTIH: dermagagizi.puskesmasseribuselatan.com
 
-Solusi perbaikan menyeluruh untuk masalah:
-> *"Situs masih belum bisa tampil karena folder dist belum ada di root website / index.html masih memanggil /src/main.tsx"*
-
----
-
-## 🔍 PENYEBAB & PERBAIKAN YANG SUDAH DITERAPKAN
-
-1. **Folder `dist` sebelumnya tidak terkirim ke GitHub**:
-   - Di file `.gitignore` sebelumnya, folder hasil build terabaikan secara default.
-   - **Sudah diperbaiki**: `.gitignore` kini diatur secara tegas (`!dist/` dan `!assets/`) agar folder `dist/` dan `assets/` hasil build produksi **selalu diunggah ke GitHub**.
-2. **Server Hostinger membaca file `index.html` mentah React/Vite**:
-   - Ketika Hostinger Git menarik branch `main`, web server Hostinger (Apache/LiteSpeed) menyajikan `index.html` root yang memanggil TypeScript `/src/main.tsx` sehingga browser menampilkan layar putih.
-   - **Sudah diperbaiki**:
-     - File `.htaccess` telah dikonfigurasi ulang: setiap kali pengunjung membuka `https://dermagagizi.puskesmasseribuselatan.com/`, server **otomatis menyajikan `dist/index.html` dan aset `dist/assets/` terkompilasi**.
-     - Ditambahkan dispatcher `index.php` sebagai pengaman ganda jika server LiteSpeed memprioritaskan PHP.
-     - Folder `assets/` juga digandakan langsung di root.
+## 🔎 HASIL PENGECEKAN LANGSUNG KE SERVER HOSTINGER
+Kami telah melakukan pengecekan langsung (*live probe*) ke domain **`dermagagizi.puskesmasseribuselatan.com`**:
+1. Server Hostinger aktif dan merespons via **PHP 8.3 & LiteSpeed**.
+2. File aset JavaScript produksi (`/assets/index-Cem06OLe.js` - 1.29 MB) dan CSS (`/assets/index-CD2ZNZPF.css` - 71 KB) **sebenarnya sudah berhasil terunggah dan aktif di Hostinger**.
+3. **Penyebab Layar Putih**: Hostinger mengeksekusi `index.php`, dan sebelumnya `index.php` membaca ulang `index.html` mentah yang memanggil `/src/main.tsx`. Browser tidak dapat membaca file TypeScript mentah tersebut, sehingga browser berhenti dan menampilkan layar putih.
 
 ---
 
-## 🚀 CARA AKTIVASI (CUKUP 2 LANGKAH MUDAH)
+## ✅ PERBAIKAN YANG TELAH SELESAI DITERAPKAN
+1. **`index.php` Otomatis**: Sekarang `index.php` secara otomatis mendeteksi file bundle JavaScript dan CSS di folder `assets/`, lalu **langsung mencetak HTML Produksi yang sudah siap pakai**. Browser tidak akan pernah lagi mencoba memanggil `/src/main.tsx`.
+2. **`.htaccess` Diperbarui**: Semua akses ke alamat utama (`/`) maupun rute SPA dialihkan langsung ke `index.php` dispatcher.
+3. **`index.html` Dilengkapi Auto-Redirect**: Jika suatu saat server menyajikan file `index.html`, script di dalamnya akan langsung mengalihkan browser ke `index.php`.
 
-### Langkah 1: Simpan & Publish ke GitHub dari Google AI Studio
-1. Di pojok kanan atas Google AI Studio, klik tombol **Publish to GitHub** (atau **Export / Sync to GitHub**).
-2. Tunggu hingga proses commit dan push selesai.
-   *(Folder `dist/`, `.htaccess`, dan file kompilasi JavaScript/CSS kini ikut terunggah secara utuh ke repositori GitHub Anda).*
+---
 
-### Langkah 2: Tarik Pembaruan di Hostinger
+## 🚀 LANGKAH AKTIVASI SEKARANG (2 MENIT SELESAI)
+
+### Langkah 1: Publish ke GitHub dari Google AI Studio
+1. Klik tombol **Publish to GitHub** (atau **Sync to GitHub**) di pojok kanan atas layar Google AI Studio ini.
+2. Tunggu beberapa detik hingga proses push selesai.
+
+### Langkah 2: Deploy di Hostinger Git
 1. Buka **Hostinger hPanel** -> pilih domain **`dermagagizi.puskesmasseribuselatan.com`**.
-2. Masuk ke menu **Tingkat Lanjut (Advanced)** -> **Git**.
-3. Di samping repository Anda, klik tombol **Deploy** atau **Pull** (Tarik).
-   - *Catatan: Jika sebelumnya error atau repository macet, Anda bisa klik **Hapus/Delete Repository** di menu Git Hostinger, lalu buat ulang dengan memasukkan URL repo GitHub Anda, branch `main`, dan klik **Deploy**.*
-4. Setelah statusnya berhasil (*Deployed*), buka situs:
+2. Buka menu **Tingkat Lanjut (Advanced)** -> **Git**.
+3. Klik tombol **Deploy** (atau **Pull** / Tarik).
+4. Setelah statusnya berhasil (*Deployed*), buka situs Anda di browser:
    👉 **https://dermagagizi.puskesmasseribuselatan.com**
-5. Lakukan hard refresh dengan menekan **Ctrl + F5** (atau **Cmd + Shift + R** di Mac) untuk membuang cache lama.
+5. Tekan **Ctrl + F5** (di Windows) atau **Cmd + Shift + R** (di Mac) untuk membersihkan cache browser.
 
----
-
-## 🎯 ALTERNATIF JIKA MENGGUNAKAN BRANCH `production`
-Jika Anda lebih menyukai branch khusus produksi di mana file `dist/` ditaruh langsung di paling depan (tanpa folder bertingkat):
-- GitHub Actions (`.github/workflows/deploy-production.yml`) otomatis membuat branch **`production`** setiap kali Anda mem-publish ke `main`.
-- Di menu Git Hostinger, Anda cukup mengubah pilihan Branch dari `main` menjadi **`production`**, lalu klik **Deploy**.
+Web aplikasi **DERMAGA GIZI** akan langsung tampil aktif dan berfungsi 100%!

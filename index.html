@@ -14,16 +14,18 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script>
-      // DERMAGA GIZI - Smart Environment Detection
-      // Jika file mentah /src/main.tsx ini tidak sengaja disajikan langsung di web hosting produksi Hostinger,
-      // otomatis alihkan ke folder /dist/ yang berisi aplikasi produksi terkompilasi.
+      // Fallback pengaman untuk web hosting publik Hostinger:
+      // Jika file index.html mentah ini tidak sengaja disajikan langsung oleh web server (bukan via index.php),
+      // otomatis alihkan seketika ke index.php yang menyajikan bundle produksi terkompilasi.
       (function() {
         var isDev = location.hostname === 'localhost' || 
                     location.hostname === '127.0.0.1' || 
                     location.port === '3000' || 
                     location.hostname.indexOf('run.app') !== -1;
-        if (!isDev && document.querySelector('script[src*="/src/main.tsx"]')) {
-          window.location.replace('./dist/');
+        if (!isDev) {
+          if (location.pathname === '/' || location.pathname.endsWith('/index.html')) {
+            window.location.replace('./index.php');
+          }
         }
       })();
     </script>
@@ -33,4 +35,3 @@
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-
