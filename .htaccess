@@ -1,0 +1,40 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Utamakan index.php untuk web hosting Apache/LiteSpeed
+  DirectoryIndex index.php index.html
+
+  # 1. Arahkan akses aset /assets/... langsung ke /dist/assets/...
+  RewriteCond %{DOCUMENT_ROOT}/dist/assets/$1 -f
+  RewriteRule ^assets/(.*)$ dist/assets/$1 [L]
+
+  # 2. Jika file atau folder fisik memang ada, sajikan langsung
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # 3. Jika file ada di dalam dist/, sajikan
+  RewriteCond %{DOCUMENT_ROOT}/dist%{REQUEST_URI} -f
+  RewriteRule ^(.*)$ dist/$1 [L]
+
+  # 4. Dispatcher ke index.php jika ada
+  RewriteCond %{DOCUMENT_ROOT}/index.php -f
+  RewriteRule . index.php [L]
+
+  # 5. Fallback ke dist/index.html
+  RewriteCond %{DOCUMENT_ROOT}/dist/index.html -f
+  RewriteRule . dist/index.html [L]
+
+  # 6. Fallback standar
+  RewriteRule . index.html [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot)$">
+    Header set Cache-Control "max-age=31536000, public, immutable"
+  </FilesMatch>
+  <FilesMatch "index\.(html|php)$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </FilesMatch>
+</IfModule>

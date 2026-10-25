@@ -13,6 +13,24 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+      // Auto-fallback: Jika dibuka di web hosting produksi dan folder dist tersedia, otomatis alihkan ke dist/
+      (function() {
+        var isDevEnv = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname.indexOf('run.app') !== -1;
+        if (!isDevEnv) {
+          if (location.pathname === '/' || location.pathname.endsWith('/index.html')) {
+            try {
+              var xhr = new XMLHttpRequest();
+              xhr.open('HEAD', './dist/index.html', false);
+              xhr.send();
+              if (xhr.status >= 200 && xhr.status < 400) {
+                window.location.replace('./dist/');
+              }
+            } catch (e) {}
+          }
+        }
+      })();
+    </script>
   </head>
   <body class="bg-slate-50 text-slate-800 antialiased selection:bg-sky-500 selection:text-white">
     <div id="root"></div>
