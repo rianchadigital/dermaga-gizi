@@ -1,6 +1,6 @@
 node_modules/
 build/
-dist/
+# dist is included so pre-compiled production build is available on GitHub
 coverage/
 .DS_Store
 *.log
