@@ -14,20 +14,16 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script>
-      // Auto-fallback: Jika dibuka di web hosting produksi dan folder dist tersedia, otomatis alihkan ke dist/
+      // DERMAGA GIZI - Smart Environment Detection
+      // Jika file mentah /src/main.tsx ini tidak sengaja disajikan langsung di web hosting produksi Hostinger,
+      // otomatis alihkan ke folder /dist/ yang berisi aplikasi produksi terkompilasi.
       (function() {
-        var isDevEnv = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname.indexOf('run.app') !== -1;
-        if (!isDevEnv) {
-          if (location.pathname === '/' || location.pathname.endsWith('/index.html')) {
-            try {
-              var xhr = new XMLHttpRequest();
-              xhr.open('HEAD', './dist/index.html', false);
-              xhr.send();
-              if (xhr.status >= 200 && xhr.status < 400) {
-                window.location.replace('./dist/');
-              }
-            } catch (e) {}
-          }
+        var isDev = location.hostname === 'localhost' || 
+                    location.hostname === '127.0.0.1' || 
+                    location.port === '3000' || 
+                    location.hostname.indexOf('run.app') !== -1;
+        if (!isDev && document.querySelector('script[src*="/src/main.tsx"]')) {
+          window.location.replace('./dist/');
         }
       })();
     </script>

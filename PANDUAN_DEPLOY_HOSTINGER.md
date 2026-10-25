@@ -1,53 +1,43 @@
-# SOLUSI DEPLOY LANGSUNG UNTUK dermagagizi.puskesmasseribuselatan.com
+# PANDUAN DEPLOY OTOMATIS: dermagagizi.puskesmasseribuselatan.com
 
-Dokumen ini adalah solusi langsung terhadap kendala yang terdeteksi di Hostinger:
-> *"Penyebabnya sudah terkonfirmasi: situs masih menyajikan source React/Vite (memanggil /src/main.tsx), bukan hasil build produksinya."*
-
----
-
-## MENGAPA INI TERJADI DI HOSTINGER?
-Ketika Anda menghubungkan Hostinger Git ke branch `main`, Hostinger menarik kode mentah proyek yang `index.html`-nya memanggil `/src/main.tsx`. Browser internet tidak bisa membaca file TypeScript mentah tersebut.
+Solusi perbaikan menyeluruh untuk masalah:
+> *"Situs masih belum bisa tampil karena folder dist belum ada di root website / index.html masih memanggil /src/main.tsx"*
 
 ---
 
-## DUA CARA AGAR WEB LANGSUNG TAMPIL
+## 🔍 PENYEBAB & PERBAIKAN YANG SUDAH DITERAPKAN
 
-### METODE 1: Otomatis Sinkronisasi via Branch `production` (Rekomendasi Hostinger Git)
-Kami telah memasang sistem otomatis GitHub Actions (`.github/workflows/deploy-production.yml`).
-
-1. **Publish ke GitHub**:
-   - Di Google AI Studio, klik **Publish to GitHub** (atau Export to GitHub).
-   - Begitu ter-publish ke branch `main`, GitHub Actions akan otomatis meng-compile proyek dan memasukkan file jadinya ke branch baru bernama **`production`**.
-   - Di branch `production` ini, file `index.html` hasil compile **sudah berada tepat di posisi root / utama**!
-
-2. **Atur di Hostinger hPanel**:
-   - Masuk ke Hostinger hPanel -> Buka website **`dermagagizi.puskesmasseribuselatan.com`**.
-   - Masuk ke menu **Tingkat Lanjut (Advanced)** -> **Git**.
-   - Jika sudah ada repository sebelumnya, klik **Hapus (Delete)** repository lama tersebut.
-   - Buat baru:
-     - **Repository URL**: URL repository GitHub Anda
-     - **Branch**: Ganti `main` menjadi **`production`**
-     - **Install in Directory**: Kosongkan atau biarkan `public_html`
-   - Klik **Deploy**.
-   - Selesai! Web Anda akan langsung tampil karena branch `production` berisi file kompilasi murni yang siap disajikan oleh Hostinger.
+1. **Folder `dist` sebelumnya tidak terkirim ke GitHub**:
+   - Di file `.gitignore` sebelumnya, folder hasil build terabaikan secara default.
+   - **Sudah diperbaiki**: `.gitignore` kini diatur secara tegas (`!dist/` dan `!assets/`) agar folder `dist/` dan `assets/` hasil build produksi **selalu diunggah ke GitHub**.
+2. **Server Hostinger membaca file `index.html` mentah React/Vite**:
+   - Ketika Hostinger Git menarik branch `main`, web server Hostinger (Apache/LiteSpeed) menyajikan `index.html` root yang memanggil TypeScript `/src/main.tsx` sehingga browser menampilkan layar putih.
+   - **Sudah diperbaiki**:
+     - File `.htaccess` telah dikonfigurasi ulang: setiap kali pengunjung membuka `https://dermagagizi.puskesmasseribuselatan.com/`, server **otomatis menyajikan `dist/index.html` dan aset `dist/assets/` terkompilasi**.
+     - Ditambahkan dispatcher `index.php` sebagai pengaman ganda jika server LiteSpeed memprioritaskan PHP.
+     - Folder `assets/` juga digandakan langsung di root.
 
 ---
 
-### METODE 2: Upload Cepat Langsung Melalui File Manager (1 Menit Selesai)
-Folder **`dist`** sudah kami compile-kan langsung di dalam sistem ini dan sudah siap pakai.
+## 🚀 CARA AKTIVASI (CUKUP 2 LANGKAH MUDAH)
 
-1. Buka **Hostinger hPanel** -> **File Manager** untuk domain `dermagagizi.puskesmasseribuselatan.com`.
-2. Masuk ke folder **`public_html`**.
-3. Jika di dalam `public_html` ada folder `src/`, file `package.json`, atau `tsconfig.json`, hapus atau kosongkan isi `public_html`.
-4. Ambil isi dari folder **`dist`** (yang berisi `index.html`, folder `assets/`, dan file `.htaccess`).
-5. Upload langsung ke dalam **`public_html`**, sehingga susunannya menjadi:
-   ```
-   public_html/
-   ├── assets/
-   │   ├── index-CD2ZNZPF.css
-   │   └── index-Cem06OLe.js
-   ├── .htaccess
-   └── index.html
-   ```
-6. Buka **https://dermagagizi.puskesmasseribuselatan.com** di browser lalu tekan `Ctrl + F5`.
-7. Web aplikasi **DERMAGA GIZI** langsung tampil aktif dan berfungsi 100%!
+### Langkah 1: Simpan & Publish ke GitHub dari Google AI Studio
+1. Di pojok kanan atas Google AI Studio, klik tombol **Publish to GitHub** (atau **Export / Sync to GitHub**).
+2. Tunggu hingga proses commit dan push selesai.
+   *(Folder `dist/`, `.htaccess`, dan file kompilasi JavaScript/CSS kini ikut terunggah secara utuh ke repositori GitHub Anda).*
+
+### Langkah 2: Tarik Pembaruan di Hostinger
+1. Buka **Hostinger hPanel** -> pilih domain **`dermagagizi.puskesmasseribuselatan.com`**.
+2. Masuk ke menu **Tingkat Lanjut (Advanced)** -> **Git**.
+3. Di samping repository Anda, klik tombol **Deploy** atau **Pull** (Tarik).
+   - *Catatan: Jika sebelumnya error atau repository macet, Anda bisa klik **Hapus/Delete Repository** di menu Git Hostinger, lalu buat ulang dengan memasukkan URL repo GitHub Anda, branch `main`, dan klik **Deploy**.*
+4. Setelah statusnya berhasil (*Deployed*), buka situs:
+   👉 **https://dermagagizi.puskesmasseribuselatan.com**
+5. Lakukan hard refresh dengan menekan **Ctrl + F5** (atau **Cmd + Shift + R** di Mac) untuk membuang cache lama.
+
+---
+
+## 🎯 ALTERNATIF JIKA MENGGUNAKAN BRANCH `production`
+Jika Anda lebih menyukai branch khusus produksi di mana file `dist/` ditaruh langsung di paling depan (tanpa folder bertingkat):
+- GitHub Actions (`.github/workflows/deploy-production.yml`) otomatis membuat branch **`production`** setiap kali Anda mem-publish ke `main`.
+- Di menu Git Hostinger, Anda cukup mengubah pilihan Branch dari `main` menjadi **`production`**, lalu klik **Deploy**.

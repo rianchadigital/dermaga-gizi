@@ -2,32 +2,30 @@
   RewriteEngine On
   RewriteBase /
 
-  # Utamakan index.php untuk web hosting Apache/LiteSpeed
-  DirectoryIndex index.php index.html
+  # 1. Pastikan server mengutamakan file hasil build di dist/
+  DirectoryIndex dist/index.html index.php index.html
 
-  # 1. Arahkan akses aset /assets/... langsung ke /dist/assets/...
-  RewriteCond %{DOCUMENT_ROOT}/dist/assets/$1 -f
+  # 2. Rewrite langsung request root ('/') dan '/index.html' ke dist/index.html
+  RewriteRule ^$ dist/index.html [L]
+  RewriteRule ^index\.html$ dist/index.html [L]
+
+  # 3. Request ke /assets/... diarahkan ke dist/assets/...
   RewriteRule ^assets/(.*)$ dist/assets/$1 [L]
 
-  # 2. Jika file atau folder fisik memang ada, sajikan langsung
+  # 4. Jika file/folder fisik memang ada di root (selain index.html dan selain /src/), sajikan langsung
   RewriteCond %{REQUEST_FILENAME} -f [OR]
   RewriteCond %{REQUEST_FILENAME} -d
+  RewriteCond %{REQUEST_URI} !^/src/
+  RewriteCond %{REQUEST_URI} !^/index\.html$
   RewriteRule ^ - [L]
 
-  # 3. Jika file ada di dalam dist/, sajikan
-  RewriteCond %{DOCUMENT_ROOT}/dist%{REQUEST_URI} -f
-  RewriteRule ^(.*)$ dist/$1 [L]
-
-  # 4. Dispatcher ke index.php jika ada
-  RewriteCond %{DOCUMENT_ROOT}/index.php -f
-  RewriteRule . index.php [L]
-
-  # 5. Fallback ke dist/index.html
+  # 5. Routing Single Page Application (SPA): semua request lain dialihkan ke dist/index.html
   RewriteCond %{DOCUMENT_ROOT}/dist/index.html -f
   RewriteRule . dist/index.html [L]
 
-  # 6. Fallback standar
-  RewriteRule . index.html [L]
+  # 6. Fallback jika dist belum terbaca
+  RewriteCond %{DOCUMENT_ROOT}/index.php -f
+  RewriteRule . index.php [L]
 </IfModule>
 
 <IfModule mod_headers.c>

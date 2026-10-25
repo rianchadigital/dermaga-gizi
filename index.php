@@ -4,16 +4,18 @@
  * Puskesmas Kepulauan Seribu Selatan
  */
 
-// 1. Tangani permintaan aset statis (/assets/...)
 $requestUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
+// 1. Tangani permintaan aset statis (/assets/...)
 if (strpos($requestUri, '/assets/') !== false) {
-    // Ambil nama file aset
     $assetName = substr($requestUri, strpos($requestUri, '/assets/') + 8);
     $assetFile = __DIR__ . '/dist/assets/' . $assetName;
+    if (!file_exists($assetFile)) {
+        $assetFile = __DIR__ . '/assets/' . $assetName;
+    }
     
     if (file_exists($assetFile)) {
-        $ext = pathinfo($assetFile, PATHINFO_EXTENSION);
+        $ext = strtolower(pathinfo($assetFile, PATHINFO_EXTENSION));
         if ($ext === 'css') {
             header('Content-Type: text/css; charset=utf-8');
         } else if ($ext === 'js') {
@@ -21,7 +23,7 @@ if (strpos($requestUri, '/assets/') !== false) {
         } else if ($ext === 'svg') {
             header('Content-Type: image/svg+xml');
         } else if (in_array($ext, ['png', 'jpg', 'jpeg', 'webp', 'gif', 'ico'])) {
-            header('Content-Type: image/' . ($ext === 'svg' ? 'svg+xml' : $ext));
+            header('Content-Type: image/' . ($ext === 'jpg' ? 'jpeg' : $ext));
         } else if (in_array($ext, ['woff', 'woff2', 'ttf', 'eot'])) {
             header('Content-Type: font/' . $ext);
         }
