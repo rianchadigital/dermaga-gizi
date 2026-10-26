@@ -6,7 +6,11 @@ import {
   Kendala, 
   KegiatanLintasSektor, 
   User, 
-  RiwayatAktivitas 
+  RiwayatAktivitas,
+  Kelurahan,
+  Posyandu,
+  UserLintasSektor,
+  LaporanPosyandu
 } from '../types';
 
 export const INITIAL_USERS: User[] = [
@@ -643,3 +647,507 @@ export const INITIAL_LOGS: RiwayatAktivitas[] = [
     status: 'SUCCESS'
   }
 ];
+
+// --- 3 KELURAHAN RESMI KEPULAUAN SERIBU SELATAN ---
+export const INITIAL_KELURAHAN: Kelurahan[] = [
+  {
+    kelurahan_id: 'KEL-01',
+    nama_kelurahan: 'Kelurahan Pulau Tidung',
+    kecamatan: 'Kepulauan Seribu Selatan',
+    daftar_pulau: ['Pulau Tidung', 'Pulau Tidung Kecil', 'Pulau Payung'],
+    lurah_nama: 'Hafisurrahman, S.STP, M.Si',
+    no_wa_lurah: '6281288991122',
+    jumlah_rw: 4,
+    jumlah_rt: 29,
+    total_sasaran_balita: 380
+  },
+  {
+    kelurahan_id: 'KEL-02',
+    nama_kelurahan: 'Kelurahan Pulau Pari',
+    kecamatan: 'Kepulauan Seribu Selatan',
+    daftar_pulau: ['Pulau Pari', 'Pulau Lancang', 'Pulau Tikus', 'Pulau Burung'],
+    lurah_nama: 'M. Adriansyah, S.IP',
+    no_wa_lurah: '6281311554433',
+    jumlah_rw: 4,
+    jumlah_rt: 14,
+    total_sasaran_balita: 290
+  },
+  {
+    kelurahan_id: 'KEL-03',
+    nama_kelurahan: 'Kelurahan Pulau Untung Jawa',
+    kecamatan: 'Kepulauan Seribu Selatan',
+    daftar_pulau: ['Pulau Untung Jawa', 'Pulau Rambut', 'Pulau Onrust', 'Pulau Cipir'],
+    lurah_nama: 'Sidik Riyanto, S.AP',
+    no_wa_lurah: '6281988223311',
+    jumlah_rw: 3,
+    jumlah_rt: 9,
+    total_sasaran_balita: 210
+  }
+];
+
+// --- DAFTAR POSYANDU PER KELURAHAN ---
+export const INITIAL_POSYANDU: Posyandu[] = [
+  // Kelurahan Pulau Tidung
+  {
+    posyandu_id: 'POS-01',
+    nama_posyandu: 'Posyandu Melati 1',
+    kelurahan_id: 'KEL-01',
+    kelurahan_nama: 'Kelurahan Pulau Tidung',
+    pulau_id: 'PULAU-01',
+    pulau_nama: 'Pulau Tidung',
+    rw: 'RW 01',
+    rt: 'RT 01 - RT 06',
+    lokasi_alamat: 'Balai Warga RW 01, Jl. Pantai Barat, Pulau Tidung',
+    ketua_kader: 'Ibu Nurjanah',
+    no_wa_kader: '6281388776611',
+    jumlah_kader: 6,
+    jadwal_hari: 'Senin Minggu ke-2',
+    total_sasaran: 95,
+    status_aktif: true
+  },
+  {
+    posyandu_id: 'POS-02',
+    nama_posyandu: 'Posyandu Melati 2',
+    kelurahan_id: 'KEL-01',
+    kelurahan_nama: 'Kelurahan Pulau Tidung',
+    pulau_id: 'PULAU-01',
+    pulau_nama: 'Pulau Tidung',
+    rw: 'RW 02',
+    rt: 'RT 01 - RT 07',
+    lokasi_alamat: 'Gedung Sasana Krida RW 02, Pulau Tidung',
+    ketua_kader: 'Ibu Rohani',
+    no_wa_kader: '6281299554422',
+    jumlah_kader: 5,
+    jadwal_hari: 'Selasa Minggu ke-2',
+    total_sasaran: 105,
+    status_aktif: true
+  },
+  {
+    posyandu_id: 'POS-03',
+    nama_posyandu: 'Posyandu Cempaka',
+    kelurahan_id: 'KEL-01',
+    kelurahan_nama: 'Kelurahan Pulau Tidung',
+    pulau_id: 'PULAU-01',
+    pulau_nama: 'Pulau Tidung',
+    rw: 'RW 03',
+    rt: 'RT 01 - RT 08',
+    lokasi_alamat: 'Ruang Serbaguna RW 03, Pulau Tidung',
+    ketua_kader: 'Ibu Halimah',
+    no_wa_kader: '6285711443388',
+    jumlah_kader: 6,
+    jadwal_hari: 'Rabu Minggu ke-2',
+    total_sasaran: 90,
+    status_aktif: true
+  },
+  {
+    posyandu_id: 'POS-04',
+    nama_posyandu: 'Posyandu Teratai',
+    kelurahan_id: 'KEL-01',
+    kelurahan_nama: 'Kelurahan Pulau Tidung',
+    pulau_id: 'PULAU-01',
+    pulau_nama: 'Pulau Tidung',
+    rw: 'RW 04',
+    rt: 'RT 01 - RT 08',
+    lokasi_alamat: 'Pos Balai Warga RW 04, Timur Jembatan Cinta',
+    ketua_kader: 'Ibu Maryamah',
+    no_wa_kader: '6287899665533',
+    jumlah_kader: 5,
+    jadwal_hari: 'Kamis Minggu ke-2',
+    total_sasaran: 90,
+    status_aktif: true
+  },
+
+  // Kelurahan Pulau Pari (Termasuk Pulau Lancang)
+  {
+    posyandu_id: 'POS-05',
+    nama_posyandu: 'Posyandu Mawar',
+    kelurahan_id: 'KEL-02',
+    kelurahan_nama: 'Kelurahan Pulau Pari',
+    pulau_id: 'PULAU-02',
+    pulau_nama: 'Pulau Pari',
+    rw: 'RW 01',
+    rt: 'RT 01 - RT 04',
+    lokasi_alamat: 'Balai RW 01, Dekat Dermaga Pulau Pari',
+    ketua_kader: 'Ibu Sulastri',
+    no_wa_kader: '6281322334455',
+    jumlah_kader: 5,
+    jadwal_hari: 'Selasa Minggu ke-3',
+    total_sasaran: 85,
+    status_aktif: true
+  },
+  {
+    posyandu_id: 'POS-06',
+    nama_posyandu: 'Posyandu Bougenville',
+    kelurahan_id: 'KEL-02',
+    kelurahan_nama: 'Kelurahan Pulau Pari',
+    pulau_id: 'PULAU-02',
+    pulau_nama: 'Pulau Pari',
+    rw: 'RW 02',
+    rt: 'RT 01 - RT 04',
+    lokasi_alamat: 'Pos RW 02 Pantai Pasir Perawan, Pulau Pari',
+    ketua_kader: 'Ibu Asnah',
+    no_wa_kader: '6285744556677',
+    jumlah_kader: 5,
+    jadwal_hari: 'Rabu Minggu ke-3',
+    total_sasaran: 75,
+    status_aktif: true
+  },
+  {
+    posyandu_id: 'POS-07',
+    nama_posyandu: 'Posyandu Dahlia',
+    kelurahan_id: 'KEL-02',
+    kelurahan_nama: 'Kelurahan Pulau Pari',
+    pulau_id: 'PULAU-03',
+    pulau_nama: 'Pulau Lancang',
+    rw: 'RW 03',
+    rt: 'RT 01 - RT 06',
+    lokasi_alamat: 'Gedung Pustu & Pos Gizi Pulau Lancang',
+    ketua_kader: 'Ibu Maryanah',
+    no_wa_kader: '6287811998877',
+    jumlah_kader: 6,
+    jadwal_hari: 'Kamis Minggu ke-3',
+    total_sasaran: 130,
+    status_aktif: true
+  },
+
+  // Kelurahan Pulau Untung Jawa
+  {
+    posyandu_id: 'POS-08',
+    nama_posyandu: 'Posyandu Anggrek',
+    kelurahan_id: 'KEL-03',
+    kelurahan_nama: 'Kelurahan Pulau Untung Jawa',
+    pulau_id: 'PULAU-04',
+    pulau_nama: 'Pulau Untung Jawa',
+    rw: 'RW 01',
+    rt: 'RT 01 - RT 05',
+    lokasi_alamat: 'Gedung Sasana Budaya RW 01, Untung Jawa',
+    ketua_kader: 'Ibu Siti Aisyah',
+    no_wa_kader: '6281299884433',
+    jumlah_kader: 5,
+    jadwal_hari: 'Senin Minggu ke-3',
+    total_sasaran: 110,
+    status_aktif: true
+  },
+  {
+    posyandu_id: 'POS-09',
+    nama_posyandu: 'Posyandu Kenanga',
+    kelurahan_id: 'KEL-03',
+    kelurahan_nama: 'Kelurahan Pulau Untung Jawa',
+    pulau_id: 'PULAU-04',
+    pulau_nama: 'Pulau Untung Jawa',
+    rw: 'RW 02 & RW 03',
+    rt: 'RT 01 - RT 04',
+    lokasi_alamat: 'Pos Pelayanan Terpadu RW 02, Untung Jawa',
+    ketua_kader: 'Ibu Fatimah Zahra',
+    no_wa_kader: '6281377889900',
+    jumlah_kader: 5,
+    jadwal_hari: 'Rabu Minggu ke-3',
+    total_sasaran: 100,
+    status_aktif: true
+  }
+];
+
+// --- DAFTAR USER & STAKEHOLDERS LINTAS SEKTOR TERNOTIFIKASI WHATSAPP ---
+export const INITIAL_USER_LINTAS_SEKTOR: UserLintasSektor[] = [
+  {
+    user_id: 'ULS-001',
+    nama: 'Hafisurrahman, S.STP, M.Si',
+    jabatan: 'Lurah Pulau Tidung',
+    instansi_sektor: 'Kelurahan Pulau Tidung',
+    kelurahan_id: 'KEL-01',
+    kelurahan_nama: 'Kelurahan Pulau Tidung',
+    no_wa: '6281288991122',
+    email: 'lurah.tidung@seribu.jakarta.go.id',
+    status_notifikasi_wa: true,
+    status_aktif: true
+  },
+  {
+    user_id: 'ULS-002',
+    nama: 'M. Adriansyah, S.IP',
+    jabatan: 'Lurah Pulau Pari',
+    instansi_sektor: 'Kelurahan Pulau Pari',
+    kelurahan_id: 'KEL-02',
+    kelurahan_nama: 'Kelurahan Pulau Pari',
+    no_wa: '6281311554433',
+    email: 'lurah.pari@seribu.jakarta.go.id',
+    status_notifikasi_wa: true,
+    status_aktif: true
+  },
+  {
+    user_id: 'ULS-003',
+    nama: 'Sidik Riyanto, S.AP',
+    jabatan: 'Lurah Pulau Untung Jawa',
+    instansi_sektor: 'Kelurahan Pulau Untung Jawa',
+    kelurahan_id: 'KEL-03',
+    kelurahan_nama: 'Kelurahan Pulau Untung Jawa',
+    no_wa: '6281988223311',
+    email: 'lurah.untungjawa@seribu.jakarta.go.id',
+    status_notifikasi_wa: true,
+    status_aktif: true
+  },
+  {
+    user_id: 'ULS-004',
+    nama: 'Drs. H. Ismail Mustofa, M.Si',
+    jabatan: 'Camat Kepulauan Seribu Selatan',
+    instansi_sektor: 'Kecamatan Kepulauan Seribu Selatan',
+    kelurahan_id: 'ALL',
+    kelurahan_nama: 'Kecamatan Kepulauan Seribu Selatan',
+    no_wa: '6281177665544',
+    email: 'camat.seribuselatan@seribu.jakarta.go.id',
+    status_notifikasi_wa: true,
+    status_aktif: true
+  },
+  {
+    user_id: 'ULS-005',
+    nama: 'Hj. Endang Rahmawati',
+    jabatan: 'Ketua TP PKK Kecamatan',
+    instansi_sektor: 'TP PKK Kepulauan Seribu Selatan',
+    kelurahan_id: 'ALL',
+    kelurahan_nama: 'Semua Kelurahan',
+    no_wa: '6281299332211',
+    email: 'pkk.seribuselatan@gmail.com',
+    status_notifikasi_wa: true,
+    status_aktif: true
+  },
+  {
+    user_id: 'ULS-006',
+    nama: 'Ibu Hj. Marlina',
+    jabatan: 'Ketua TP PKK Kelurahan Pulau Tidung',
+    instansi_sektor: 'TP PKK Kelurahan',
+    kelurahan_id: 'KEL-01',
+    kelurahan_nama: 'Kelurahan Pulau Tidung',
+    no_wa: '6281344556677',
+    email: 'pkk.tidung@gmail.com',
+    status_notifikasi_wa: true,
+    status_aktif: true
+  },
+  {
+    user_id: 'ULS-007',
+    nama: 'Nurul Hidayati, S.Gz, RD',
+    jabatan: 'Koordinator Pelayanan Gizi',
+    instansi_sektor: 'Puskesmas Kepulauan Seribu Selatan',
+    kelurahan_id: 'ALL',
+    kelurahan_nama: 'Puskesmas Kecamatan',
+    no_wa: '6281311223344',
+    email: 'nutrisionis.selatan@seribu.jakarta.go.id',
+    status_notifikasi_wa: true,
+    status_aktif: true
+  },
+  {
+    user_id: 'ULS-008',
+    nama: 'dr. Farah Anggraini, M.K.M.',
+    jabatan: 'Kepala Puskesmas',
+    instansi_sektor: 'Puskesmas Kepulauan Seribu Selatan',
+    kelurahan_id: 'ALL',
+    kelurahan_nama: 'Puskesmas Kecamatan',
+    no_wa: '6281188223344',
+    email: 'kapus.seribuselatan@dinkes.jakarta.go.id',
+    status_notifikasi_wa: true,
+    status_aktif: true
+  },
+  {
+    user_id: 'ULS-009',
+    nama: 'Ahmad Syafi\'i, S.IP',
+    jabatan: 'Kasi Kesra & Tim Penurunan Stunting',
+    instansi_sektor: 'Seksi Kesra Kelurahan Pulau Tidung',
+    kelurahan_id: 'KEL-01',
+    kelurahan_nama: 'Kelurahan Pulau Tidung',
+    no_wa: '6281900112233',
+    email: 'kesra.tidung@seribu.jakarta.go.id',
+    status_notifikasi_wa: true,
+    status_aktif: true
+  },
+  {
+    user_id: 'ULS-010',
+    nama: 'Bdn. Siti Rohmah, S.Tr.Keb',
+    jabatan: 'Bidan Koordinator Pustu Untung Jawa',
+    instansi_sektor: 'Puskesmas Pembantu Pulau Untung Jawa',
+    kelurahan_id: 'KEL-03',
+    kelurahan_nama: 'Kelurahan Pulau Untung Jawa',
+    no_wa: '6281288776655',
+    email: 'bidan.untungjawa@seribu.jakarta.go.id',
+    status_notifikasi_wa: true,
+    status_aktif: true
+  },
+  {
+    user_id: 'ULS-011',
+    nama: 'Ibu Maryanah',
+    jabatan: 'Koordinator Tim Pendamping Keluarga (TPK)',
+    instansi_sektor: 'Kader Posyandu & TPK Stunting',
+    kelurahan_id: 'KEL-02',
+    kelurahan_nama: 'Kelurahan Pulau Pari',
+    no_wa: '6287811998877',
+    email: 'tpk.lancang@gmail.com',
+    status_notifikasi_wa: true,
+    status_aktif: true
+  },
+  {
+    user_id: 'ULS-012',
+    nama: 'H. Abdul Rasyid, S.Ag',
+    jabatan: 'Kepala KUA / Bimbingan Catin Bebas Stunting',
+    instansi_sektor: 'KUA Kepulauan Seribu Selatan',
+    kelurahan_id: 'ALL',
+    kelurahan_nama: 'Kecamatan Kepulauan Seribu Selatan',
+    no_wa: '6281566778899',
+    email: 'kua.seribuselatan@kemenag.go.id',
+    status_notifikasi_wa: true,
+    status_aktif: true
+  }
+];
+
+// --- INITIAL LAPORAN POSYANDU BULANAN ---
+export const INITIAL_LAPORAN_POSYANDU: LaporanPosyandu[] = [
+  {
+    laporan_id: 'LAP-POS-2026-001',
+    tanggal_pelaksanaan: '2026-10-14',
+    bulan: '10',
+    tahun: '2026',
+    kelurahan_id: 'KEL-01',
+    kelurahan_nama: 'Kelurahan Pulau Tidung',
+    posyandu_id: 'POS-01',
+    posyandu_nama: 'Posyandu Melati 1',
+    petugas_pelapor: 'Ibu Nurjanah (Kader)',
+    no_wa_petugas: '6281388776611',
+    total_sasaran: 95,
+    total_ditimbang: 84,
+    total_tidak_hadir: 11,
+    persentase_d_s: 88.4,
+    keterangan_sweeping: '11 balita tidak hadir dijadwalkan sweeping home-visit bersama bidan desa pada 17/10/2026.',
+    status_notifikasi_wa: 'TERKIRIM',
+    daftar_balita_kurang_gizi: [
+      {
+        id: 'BG-001',
+        nama_balita: 'Ahmad Rifai',
+        nik: '3101011405240001',
+        nama_ortu: 'Bpk. Hasan / Ibu Maryam',
+        no_wa_ortu: '6281299881122',
+        jenis_kelamin: 'L',
+        tanggal_lahir: '2024-05-14',
+        usia_bulan: 29,
+        berat_badan: 8.4,
+        tinggi_badan: 78.0,
+        lila: 12.0,
+        status_gizi: 'Wasting (Kurus/Gizi Kurang)',
+        catatan_kondisi: 'BB tidak naik dalam 2 kali penimbangan berturut-turut. Riwayat ISPA berulang.',
+        rencana_tindak_lanjut: 'Pemberian PMT Pemulihan pangan lokal ikan laut tinggi protein selama 90 hari dan konseling gizi.'
+      }
+    ],
+    created_at: '14/10/2026',
+    created_by: 'Ibu Nurjanah'
+  },
+  {
+    laporan_id: 'LAP-POS-2026-002',
+    tanggal_pelaksanaan: '2026-10-15',
+    bulan: '10',
+    tahun: '2026',
+    kelurahan_id: 'KEL-01',
+    kelurahan_nama: 'Kelurahan Pulau Tidung',
+    posyandu_id: 'POS-02',
+    posyandu_nama: 'Posyandu Melati 2',
+    petugas_pelapor: 'Ibu Rohani (Kader)',
+    no_wa_petugas: '6281299554422',
+    total_sasaran: 105,
+    total_ditimbang: 91,
+    total_tidak_hadir: 14,
+    persentase_d_s: 86.7,
+    keterangan_sweeping: 'Sweeping terjadwal dibantu TPK kelurahan.',
+    status_notifikasi_wa: 'TERKIRIM',
+    daftar_balita_kurang_gizi: [
+      {
+        id: 'BG-002',
+        nama_balita: 'Bilqis Humaira',
+        nik: '3101012208240002',
+        nama_ortu: 'Bpk. Ridwan / Ibu Suhartini',
+        no_wa_ortu: '6281311224455',
+        jenis_kelamin: 'P',
+        tanggal_lahir: '2024-08-22',
+        usia_bulan: 26,
+        berat_badan: 7.9,
+        tinggi_badan: 74.5,
+        lila: 11.8,
+        status_gizi: 'Stunting (Pendek)',
+        catatan_kondisi: 'Panjang badan menurut umur berada pada <-2 SD standar WHO. MPASI belum adekuat.',
+        rencana_tindak_lanjut: 'Kunjungan dokter spesialis anak keliling Puskesmas, evaluasi asupan mikronutrien Taburia.'
+      }
+    ],
+    created_at: '15/10/2026',
+    created_by: 'Ibu Rohani'
+  },
+  {
+    laporan_id: 'LAP-POS-2026-003',
+    tanggal_pelaksanaan: '2026-10-16',
+    bulan: '10',
+    tahun: '2026',
+    kelurahan_id: 'KEL-02',
+    kelurahan_nama: 'Kelurahan Pulau Pari',
+    posyandu_id: 'POS-07',
+    posyandu_nama: 'Posyandu Dahlia',
+    petugas_pelapor: 'Ibu Maryanah (Kader)',
+    no_wa_petugas: '6287811998877',
+    total_sasaran: 130,
+    total_ditimbang: 107,
+    total_tidak_hadir: 23,
+    persentase_d_s: 82.3,
+    keterangan_sweeping: 'Sebagian balita ikut orang tua melaut/ke daratan Mauk, sweeping dilakukan hari Sabtu.',
+    status_notifikasi_wa: 'TERKIRIM',
+    daftar_balita_kurang_gizi: [
+      {
+        id: 'BG-003',
+        nama_balita: 'Dafa Alfarezi',
+        nik: '3101021009240003',
+        nama_ortu: 'Bpk. Wahyu / Ibu Halimah',
+        no_wa_ortu: '6285744332211',
+        jenis_kelamin: 'L',
+        tanggal_lahir: '2024-09-10',
+        usia_bulan: 25,
+        berat_badan: 7.2,
+        tinggi_badan: 73.0,
+        lila: 11.2,
+        status_gizi: 'Gizi Buruk',
+        catatan_kondisi: 'Tampak sangat kurus, tulang iga menonjol, nafsu makan minim pasca diare.',
+        rencana_tindak_lanjut: 'Rujukan segera ambulans laut ke Poli Gizi Puskesmas Tidung, terapi formula F-75/F-100.'
+      }
+    ],
+    created_at: '16/10/2026',
+    created_by: 'Ibu Maryanah'
+  },
+  {
+    laporan_id: 'LAP-POS-2026-004',
+    tanggal_pelaksanaan: '2026-10-17',
+    bulan: '10',
+    tahun: '2026',
+    kelurahan_id: 'KEL-03',
+    kelurahan_nama: 'Kelurahan Pulau Untung Jawa',
+    posyandu_id: 'POS-08',
+    posyandu_nama: 'Posyandu Anggrek',
+    petugas_pelapor: 'Ibu Siti Aisyah (Kader)',
+    no_wa_petugas: '6281299884433',
+    total_sasaran: 110,
+    total_ditimbang: 98,
+    total_tidak_hadir: 12,
+    persentase_d_s: 89.1,
+    keterangan_sweeping: 'Cakupan D/S sangat baik melebihi target SPM 80%. Sweeping sisa 12 anak langsung tuntas.',
+    status_notifikasi_wa: 'TERKIRIM',
+    daftar_balita_kurang_gizi: [
+      {
+        id: 'BG-004',
+        nama_balita: 'Eka Saputra',
+        nik: '3101030411240004',
+        nama_ortu: 'Bpk. Mulyadi / Ibu Ratna',
+        no_wa_ortu: '6281900554433',
+        jenis_kelamin: 'L',
+        tanggal_lahir: '2024-11-04',
+        usia_bulan: 23,
+        berat_badan: 8.8,
+        tinggi_badan: 79.0,
+        lila: 12.3,
+        status_gizi: 'Underweight (BB Kurang)',
+        catatan_kondisi: 'Berat badan di bawah garis merah KMS (-2 SD) namun tinggi badan masih normal.',
+        rencana_tindak_lanjut: 'Kunjungan rumah berkala TPK dan penyuluhan pola asuh gizi seimbang.'
+      }
+    ],
+    created_at: '17/10/2026',
+    created_by: 'Ibu Siti Aisyah'
+  }
+];
+

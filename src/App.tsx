@@ -16,6 +16,9 @@ import { KendalaView } from './components/views/KendalaView';
 import { LintasSektorView } from './components/views/LintasSektorView';
 import { LaporanView } from './components/views/LaporanView';
 import { DataMasterView } from './components/views/DataMasterView';
+import { MasterPosyanduView } from './components/views/MasterPosyanduView';
+import { MasterLintasSektorView } from './components/views/MasterLintasSektorView';
+import { InputLaporanPosyanduView } from './components/views/InputLaporanPosyanduView';
 import { UsersView } from './components/views/UsersView';
 import { SettingsView } from './components/views/SettingsView';
 import { PanduanView } from './components/views/PanduanView';
@@ -119,6 +122,11 @@ export default function App() {
 
   const handleSwitchUser = (userId: string) => {
     storageService.setCurrentUser(userId);
+    const u = storageService.getCurrentUser();
+    // Jika peran yang dipilih adalah KADER (Petugas Posyandu), arahkan ke menu yang diizinkan jika sedang di luar menu kader
+    if (u.role === 'KADER' && activeTab !== 'dashboard' && activeTab !== 'map' && activeTab !== 'input-posyandu') {
+      setActiveTab('input-posyandu');
+    }
     handleRefreshData();
   };
 
@@ -147,6 +155,7 @@ export default function App() {
         setIsOpenMobile={setIsOpenMobile}
         onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
         waNotifCount={waNotifCount}
+        currentUser={currentUser}
       />
 
       {/* Main Content Area */}
@@ -193,6 +202,31 @@ export default function App() {
               pulauList={pulauList}
               selectedPulauIdFromNav={selectedPulauIdNav}
               onNavigateTab={handleNavigateTab}
+            />
+          )}
+
+          {activeTab === 'input-posyandu' && (
+            <InputLaporanPosyanduView
+              key={refreshKey}
+              currentUser={currentUser}
+              onRefreshData={handleRefreshData}
+              onNavigateTab={handleNavigateTab}
+            />
+          )}
+
+          {activeTab === 'master-posyandu' && (
+            <MasterPosyanduView
+              key={refreshKey}
+              currentUser={currentUser}
+              onRefreshData={handleRefreshData}
+            />
+          )}
+
+          {activeTab === 'master-lintas-sektor' && (
+            <MasterLintasSektorView
+              key={refreshKey}
+              currentUser={currentUser}
+              onRefreshData={handleRefreshData}
             />
           )}
 

@@ -30,9 +30,9 @@ export interface WhatsAppNotification {
   notif_id: string;
   waktu: string;
   penerima_nama: string;
-  penerima_role: Role;
+  penerima_role: Role | string;
   penerima_wa: string;
-  kategori: 'SASARAN_BARU' | 'TINDAK_LANJUT_BARU' | 'TINDAK_LANJUT_UPDATE' | 'PERINGATAN_OVERDUE';
+  kategori: 'SASARAN_BARU' | 'TINDAK_LANJUT_BARU' | 'TINDAK_LANJUT_UPDATE' | 'PERINGATAN_OVERDUE' | 'LAPORAN_GIZI_POSYANDU';
   judul: string;
   pesan: string;
   status: 'TERKIRIM' | 'MENUNGGU';
@@ -244,3 +244,134 @@ export interface ApiResponse<T = any> {
   data: T | null;
   error?: string;
 }
+
+// --- MASTER DATA POSYANDU & KELURAHAN ---
+export interface Kelurahan {
+  kelurahan_id: string; // 'KEL-01'
+  nama_kelurahan: string; // 'Kelurahan Pulau Tidung'
+  kecamatan: string; // 'Kepulauan Seribu Selatan'
+  daftar_pulau: string[];
+  lurah_nama: string;
+  no_wa_lurah: string;
+  jumlah_rw: number;
+  jumlah_rt: number;
+  total_sasaran_balita: number;
+}
+
+export interface Posyandu {
+  posyandu_id: string; // 'POS-01'
+  nama_posyandu: string; // 'Posyandu Melati 1'
+  kelurahan_id: string; // 'KEL-01'
+  kelurahan_nama: string;
+  pulau_id: string;
+  pulau_nama: string;
+  rw: string; // 'RW 01'
+  rt: string; // 'RT 01-04'
+  lokasi_alamat: string;
+  ketua_kader: string;
+  no_wa_kader: string;
+  jumlah_kader: number;
+  jadwal_hari: string; // e.g. "Minggu ke-2 setiap bulan"
+  total_sasaran: number;
+  status_aktif: boolean;
+}
+
+// --- MASTER USER LINTAS SEKTOR ---
+export interface UserLintasSektor {
+  user_id: string;
+  nama: string;
+  jabatan: string; // e.g. "Lurah", "Camat", "Ketua TP PKK", "Kasi Kesra", "TPK Stunting", "Bidan Desa", "Babinsa"
+  instansi_sektor: string; // "Puskesmas", "Kelurahan", "Kecamatan", "TP PKK", "KUA", "Satpol PP/Dinsos", "Kader Posyandu"
+  kelurahan_id: string; // 'ALL' | 'KEL-01' | 'KEL-02' | 'KEL-03'
+  kelurahan_nama: string;
+  no_wa: string; // '628...'
+  email?: string;
+  status_notifikasi_wa: boolean; // Menerima notifikasi otomatis saat ada temuan gizi
+  status_aktif: boolean;
+}
+
+// --- INPUT LAPORAN POSYANDU & TEMUAN GIZI ---
+export interface BalitaKurangGiziInput {
+  id: string;
+  nama_balita: string;
+  nik: string;
+  nama_ortu: string;
+  no_wa_ortu?: string;
+  jenis_kelamin: 'L' | 'P';
+  tanggal_lahir: string; // YYYY-MM-DD
+  usia_bulan: number;
+  berat_badan: number; // kg
+  tinggi_badan: number; // cm
+  lila?: number; // cm
+  status_gizi: KategoriMasalahGizi;
+  catatan_kondisi: string;
+  rencana_tindak_lanjut: string;
+}
+
+export interface LaporanPosyandu {
+  laporan_id: string;
+  tanggal_pelaksanaan: string; // YYYY-MM-DD
+  bulan: string; // '01' - '12'
+  tahun: string; // '2026'
+  kelurahan_id: string;
+  kelurahan_nama: string;
+  posyandu_id: string;
+  posyandu_nama: string;
+  petugas_pelapor: string;
+  no_wa_petugas?: string;
+  total_sasaran: number; // (S)
+  total_ditimbang: number; // (D)
+  total_tidak_hadir: number; // (T = S - D)
+  persentase_d_s: number; // (D / S) * 100
+  keterangan_sweeping?: string;
+  daftar_balita_kurang_gizi: BalitaKurangGiziInput[];
+  status_notifikasi_wa: 'TERKIRIM' | 'MENUNGGU';
+  created_at: string;
+  created_by: string;
+}
+
+// --- EVALUASI REKAPITULASI ---
+export interface EvaluasiKelurahanItem {
+  kelurahan_id: string;
+  nama_kelurahan: string;
+  total_posyandu: number;
+  total_sasaran: number;
+  total_ditimbang: number;
+  total_tidak_hadir: number;
+  persentase_d_s: number;
+  gizi_baik: number;
+  gizi_kurang: number;
+  gizi_buruk: number;
+  stunting: number;
+  underweight: number;
+  total_masalah_gizi: number;
+  tindak_lanjut_selesai: number;
+  tindak_lanjut_proses: number;
+  tindak_lanjut_belum: number;
+  persentase_tl_selesai: number;
+}
+
+export interface EvaluasiPosyanduItem {
+  posyandu_id: string;
+  nama_posyandu: string;
+  kelurahan_id: string;
+  kelurahan_nama: string;
+  pulau_nama: string;
+  total_sasaran: number;
+  total_ditimbang: number;
+  total_tidak_hadir: number;
+  persentase_d_s: number;
+  gizi_baik: number;
+  gizi_kurang: number;
+  gizi_buruk: number;
+  stunting: number;
+  underweight: number;
+  total_masalah_gizi: number;
+  tindak_lanjut_selesai: number;
+  tindak_lanjut_proses: number;
+  tindak_lanjut_belum: number;
+  ketua_kader: string;
+  no_wa_kader: string;
+  status_pelaksanaan: 'Sudah Lapor' | 'Belum Lapor';
+}
+

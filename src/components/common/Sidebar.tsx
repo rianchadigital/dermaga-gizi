@@ -14,19 +14,26 @@ import {
   MapPin,
   X,
   ChevronRight,
-  ShieldAlert
+  ShieldAlert,
+  Building2,
+  Scale,
+  Contact2
 } from 'lucide-react';
 import { Logo } from './Logo';
+import { User } from '../../types';
 
 export type ActiveTab = 
   | 'dashboard'
   | 'map'
+  | 'input-posyandu'
   | 'tindak-lanjut'
   | 'kendala'
   | 'lintas-sektor'
   | 'laporan'
   | 'kinerja-role'
   | 'sasaran'
+  | 'master-posyandu'
+  | 'master-lintas-sektor'
   | 'master'
   | 'users'
   | 'panduan'
@@ -41,6 +48,7 @@ interface SidebarProps {
   setIsOpenMobile: (open: boolean) => void;
   onOpenWhatsAppModal: () => void;
   waNotifCount: number;
+  currentUser?: User;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -51,9 +59,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   setIsOpenMobile,
   onOpenWhatsAppModal,
-  waNotifCount
+  waNotifCount,
+  currentUser
 }) => {
-  const mainNav = [
+  // Sesuai instruksi: Petugas Posyandu (role KADER) HANYA muncul 3 menu:
+  // 1. Beranda / Ringkasan
+  // 2. Peta Wilayah
+  // 3. Input Laporan Posyandu
+  const isKader = currentUser?.role === 'KADER';
+
+  const kaderNav = [
     {
       id: 'dashboard',
       label: 'Beranda / Ringkasan',
@@ -65,6 +80,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Peta Wilayah',
       icon: Map,
       badge: null
+    },
+    {
+      id: 'input-posyandu',
+      label: 'Input Laporan Posyandu',
+      icon: Scale,
+      badge: 'Utama',
+      badgeColor: 'bg-emerald-500 text-white font-bold'
+    }
+  ];
+
+  const adminMainNav = [
+    {
+      id: 'dashboard',
+      label: 'Beranda / Ringkasan',
+      icon: Home,
+      badge: null
+    },
+    {
+      id: 'map',
+      label: 'Peta Wilayah',
+      icon: Map,
+      badge: null
+    },
+    {
+      id: 'input-posyandu',
+      label: 'Input Laporan Posyandu',
+      icon: Scale,
+      badge: 'Input',
+      badgeColor: 'bg-emerald-500 text-white font-bold'
     },
     {
       id: 'tindak-lanjut',
@@ -103,18 +147,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const dataMasterNav = [
     {
+      id: 'master-posyandu',
+      label: 'Data Posyandu & Kelurahan',
+      icon: Building2
+    },
+    {
+      id: 'master-lintas-sektor',
+      label: 'Data User Lintas Sektor',
+      icon: Contact2
+    },
+    {
       id: 'sasaran',
-      label: 'Data Sasaran',
+      label: 'Data Sasaran Balita',
       icon: Baby
     },
     {
       id: 'master',
-      label: 'Data Intervensi',
+      label: 'Data Intervensi Gizi',
       icon: Stethoscope
     },
     {
       id: 'users',
-      label: 'Pengguna & Akses',
+      label: 'Pengguna & Akses Sistem',
       icon: ShieldAlert
     }
   ];
@@ -191,33 +245,56 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
+        {/* Role Banner: Khusus Petugas Posyandu / Kader */}
+        {isKader && (
+          <div className="mx-3 mt-3 p-2.5 rounded-xl bg-emerald-950/50 border border-emerald-500/30 text-emerald-200 text-xs">
+            <div className="font-bold flex items-center gap-1.5 text-emerald-300">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>Akses Petugas Posyandu</span>
+            </div>
+            <p className="text-[10px] text-emerald-200/80 mt-1 leading-tight">
+              Menampilkan menu esensial kader: Beranda, Peta Wilayah, dan Input Laporan.
+            </p>
+          </div>
+        )}
+
         {/* Navigation list */}
         <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
           
           {/* Main Operational Menus */}
           <div className="space-y-1">
-            {mainNav.map(renderNavButton)}
+            {isKader ? (
+              // HANYA 3 MENU UNTUK PETUGAS POSYANDU SESUAI PERMINTAAN USER
+              kaderNav.map(renderNavButton)
+            ) : (
+              // MENU LENGKAP UNTUK ADMIN / NAKES / LINTAS SEKTOR
+              adminMainNav.map(renderNavButton)
+            )}
           </div>
 
-          {/* DATA MASTER Section */}
-          <div className="pt-2">
-            <div className="px-3 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              DATA MASTER
+          {/* DATA MASTER Section (Hanya untuk Admin / Pimpinan / Nakes) */}
+          {!isKader && (
+            <div className="pt-2">
+              <div className="px-3 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                DATA MASTER
+              </div>
+              <div className="space-y-1">
+                {dataMasterNav.map(renderNavButton)}
+              </div>
             </div>
-            <div className="space-y-1">
-              {dataMasterNav.map(renderNavButton)}
-            </div>
-          </div>
+          )}
 
-          {/* BANTUAN Section */}
-          <div className="pt-2">
-            <div className="px-3 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              BANTUAN
+          {/* BANTUAN Section (Hanya untuk Admin / Nakes) */}
+          {!isKader && (
+            <div className="pt-2">
+              <div className="px-3 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                BANTUAN
+              </div>
+              <div className="space-y-1">
+                {bantuanNav.map(renderNavButton)}
+              </div>
             </div>
-            <div className="space-y-1">
-              {bantuanNav.map(renderNavButton)}
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Bottom Island Card from Mockup */}

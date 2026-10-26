@@ -7,7 +7,15 @@ import {
   KegiatanLintasSektor, 
   User, 
   RiwayatAktivitas,
-  GlobalFilter 
+  GlobalFilter,
+  Kelurahan,
+  Posyandu,
+  UserLintasSektor,
+  LaporanPosyandu,
+  BalitaKurangGiziInput,
+  EvaluasiKelurahanItem,
+  EvaluasiPosyanduItem,
+  WhatsAppNotification
 } from '../types';
 import { 
   INITIAL_USERS, 
@@ -16,7 +24,11 @@ import {
   INITIAL_TINDAK_LANJUT, 
   INITIAL_KENDALA, 
   INITIAL_LINTAS_SEKTOR, 
-  INITIAL_LOGS 
+  INITIAL_LOGS,
+  INITIAL_KELURAHAN,
+  INITIAL_POSYANDU,
+  INITIAL_USER_LINTAS_SEKTOR,
+  INITIAL_LAPORAN_POSYANDU
 } from '../data/seedData';
 
 const STORAGE_KEYS = {
@@ -32,7 +44,11 @@ const STORAGE_KEYS = {
   CURRENT_USER_ID: 'dermaga_current_user_id',
   GAS_URL: 'dermaga_gas_web_app_url',
   THEME_MODE: 'dermaga_theme_mode',
-  AUTO_REFRESH: 'dermaga_auto_refresh_enabled'
+  AUTO_REFRESH: 'dermaga_auto_refresh_enabled',
+  KELURAHAN: 'dermaga_kelurahan',
+  POSYANDU: 'dermaga_posyandu',
+  USER_LINTAS_SEKTOR: 'dermaga_user_lintas_sektor',
+  LAPORAN_POSYANDU: 'dermaga_laporan_posyandu'
 };
 
 class StorageService {
@@ -118,6 +134,18 @@ class StorageService {
     if (!localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID)) {
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, 'USR-001'); // Default Admin
     }
+    if (!localStorage.getItem(STORAGE_KEYS.KELURAHAN)) {
+      localStorage.setItem(STORAGE_KEYS.KELURAHAN, JSON.stringify(INITIAL_KELURAHAN));
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.POSYANDU)) {
+      localStorage.setItem(STORAGE_KEYS.POSYANDU, JSON.stringify(INITIAL_POSYANDU));
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.USER_LINTAS_SEKTOR)) {
+      localStorage.setItem(STORAGE_KEYS.USER_LINTAS_SEKTOR, JSON.stringify(INITIAL_USER_LINTAS_SEKTOR));
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.LAPORAN_POSYANDU)) {
+      localStorage.setItem(STORAGE_KEYS.LAPORAN_POSYANDU, JSON.stringify(INITIAL_LAPORAN_POSYANDU));
+    }
   }
 
   public resetToDefault() {
@@ -128,6 +156,10 @@ class StorageService {
     localStorage.setItem(STORAGE_KEYS.KENDALA, JSON.stringify(INITIAL_KENDALA));
     localStorage.setItem(STORAGE_KEYS.LINTAS_SEKTOR, JSON.stringify(INITIAL_LINTAS_SEKTOR));
     localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(INITIAL_LOGS));
+    localStorage.setItem(STORAGE_KEYS.KELURAHAN, JSON.stringify(INITIAL_KELURAHAN));
+    localStorage.setItem(STORAGE_KEYS.POSYANDU, JSON.stringify(INITIAL_POSYANDU));
+    localStorage.setItem(STORAGE_KEYS.USER_LINTAS_SEKTOR, JSON.stringify(INITIAL_USER_LINTAS_SEKTOR));
+    localStorage.setItem(STORAGE_KEYS.LAPORAN_POSYANDU, JSON.stringify(INITIAL_LAPORAN_POSYANDU));
     this.addLog('RESET', 'SYSTEM', 'SYS-001', 'Data demo berhasil direset ke setelan awal', 'SUCCESS');
   }
 
@@ -836,6 +868,433 @@ class StorageService {
       changed = true;
     }
     return changed;
+  }
+
+  // ==========================================
+  // --- MASTER DATA KELURAHAN & POSYANDU ---
+  // ==========================================
+  public getKelurahanList(): Kelurahan[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.KELURAHAN);
+    return raw ? JSON.parse(raw) : INITIAL_KELURAHAN;
+  }
+
+  public getKelurahanById(id: string): Kelurahan | undefined {
+    return this.getKelurahanList().find(k => k.kelurahan_id === id);
+  }
+
+  public saveKelurahan(kel: Kelurahan) {
+    const list = this.getKelurahanList();
+    const idx = list.findIndex(k => k.kelurahan_id === kel.kelurahan_id);
+    if (idx >= 0) {
+      list[idx] = kel;
+    } else {
+      list.push(kel);
+    }
+    localStorage.setItem(STORAGE_KEYS.KELURAHAN, JSON.stringify(list));
+    this.addLog('UPDATE', 'SYSTEM', kel.kelurahan_id, `Data kelurahan ${kel.nama_kelurahan} diperbarui`, 'SUCCESS');
+  }
+
+  public getPosyanduList(kelurahanId?: string): Posyandu[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.POSYANDU);
+    let list: Posyandu[] = raw ? JSON.parse(raw) : INITIAL_POSYANDU;
+    if (kelurahanId && kelurahanId !== 'ALL') {
+      list = list.filter(p => p.kelurahan_id === kelurahanId);
+    }
+    return list;
+  }
+
+  public getPosyanduById(id: string): Posyandu | undefined {
+    return this.getPosyanduList().find(p => p.posyandu_id === id);
+  }
+
+  public savePosyandu(pos: Posyandu) {
+    const list = this.getPosyanduList();
+    const idx = list.findIndex(p => p.posyandu_id === pos.posyandu_id);
+    if (idx >= 0) {
+      list[idx] = pos;
+      this.addLog('UPDATE', 'SYSTEM', pos.posyandu_id, `Data posyandu ${pos.nama_posyandu} diperbarui`, 'SUCCESS');
+    } else {
+      const newPos = {
+        ...pos,
+        posyandu_id: pos.posyandu_id || `POS-${Date.now().toString().slice(-4)}`
+      };
+      list.push(newPos);
+      this.addLog('CREATE', 'SYSTEM', newPos.posyandu_id, `Posyandu baru ${newPos.nama_posyandu} ditambahkan`, 'SUCCESS');
+    }
+    localStorage.setItem(STORAGE_KEYS.POSYANDU, JSON.stringify(list));
+  }
+
+  public deletePosyandu(id: string) {
+    const list = this.getPosyanduList().filter(p => p.posyandu_id !== id);
+    localStorage.setItem(STORAGE_KEYS.POSYANDU, JSON.stringify(list));
+    this.addLog('CANCEL', 'SYSTEM', id, `Posyandu ${id} dihapus dari master data`, 'WARNING');
+  }
+
+  // ==========================================
+  // --- MASTER USER LINTAS SEKTOR ---
+  // ==========================================
+  public getUserLintasSektorList(kelurahanId?: string): UserLintasSektor[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.USER_LINTAS_SEKTOR);
+    let list: UserLintasSektor[] = raw ? JSON.parse(raw) : INITIAL_USER_LINTAS_SEKTOR;
+    if (kelurahanId && kelurahanId !== 'ALL') {
+      list = list.filter(u => u.kelurahan_id === kelurahanId || u.kelurahan_id === 'ALL');
+    }
+    return list;
+  }
+
+  public saveUserLintasSektor(user: UserLintasSektor) {
+    const list = this.getUserLintasSektorList();
+    const idx = list.findIndex(u => u.user_id === user.user_id);
+    if (idx >= 0) {
+      list[idx] = user;
+      this.addLog('UPDATE', 'LINTAS_SEKTOR', user.user_id, `Kontak lintas sektor ${user.nama} diperbarui`, 'SUCCESS');
+    } else {
+      const newUser = {
+        ...user,
+        user_id: user.user_id || `ULS-${Date.now().toString().slice(-4)}`
+      };
+      list.push(newUser);
+      this.addLog('CREATE', 'LINTAS_SEKTOR', newUser.user_id, `Kontak lintas sektor baru ${newUser.nama} ditambahkan`, 'SUCCESS');
+    }
+    localStorage.setItem(STORAGE_KEYS.USER_LINTAS_SEKTOR, JSON.stringify(list));
+  }
+
+  public deleteUserLintasSektor(id: string) {
+    const list = this.getUserLintasSektorList().filter(u => u.user_id !== id);
+    localStorage.setItem(STORAGE_KEYS.USER_LINTAS_SEKTOR, JSON.stringify(list));
+    this.addLog('CANCEL', 'LINTAS_SEKTOR', id, `Kontak lintas sektor ${id} dihapus`, 'WARNING');
+  }
+
+  // =========================================================
+  // --- INPUT LAPORAN POSYANDU & TRIGGER NOTIFIKASI WA ---
+  // =========================================================
+  public getLaporanPosyanduList(filter?: { kelurahan_id?: string; posyandu_id?: string; bulan?: string; tahun?: string }): LaporanPosyandu[] {
+    const raw = localStorage.getItem(STORAGE_KEYS.LAPORAN_POSYANDU);
+    let list: LaporanPosyandu[] = raw ? JSON.parse(raw) : INITIAL_LAPORAN_POSYANDU;
+    
+    if (filter) {
+      if (filter.kelurahan_id && filter.kelurahan_id !== 'ALL') {
+        list = list.filter(l => l.kelurahan_id === filter.kelurahan_id);
+      }
+      if (filter.posyandu_id && filter.posyandu_id !== 'ALL') {
+        list = list.filter(l => l.posyandu_id === filter.posyandu_id);
+      }
+      if (filter.bulan && filter.bulan !== 'ALL') {
+        list = list.filter(l => l.bulan === filter.bulan);
+      }
+      if (filter.tahun && filter.tahun !== 'ALL') {
+        list = list.filter(l => l.tahun === filter.tahun);
+      }
+    }
+    return list;
+  }
+
+  /**
+   * Menyimpan Laporan Posyandu.
+   * Jika ada bayi kurang gizi yang diinput:
+   * 1. Otomatis masuk ke Daftar Sasaran Balita & Daftar Tindak Lanjut!
+   * 2. Otomatis memicu notifikasi WhatsApp ke seluruh Lintas Sektor dan akun terkait!
+   */
+  public saveLaporanPosyandu(laporan: LaporanPosyandu): {
+    savedLaporan: LaporanPosyandu;
+    createdTindakLanjut: TindakLanjut[];
+    createdNotifications: WhatsAppNotification[];
+  } {
+    const list = this.getLaporanPosyanduList();
+    const isNew = !laporan.laporan_id || !list.some(l => l.laporan_id === laporan.laporan_id);
+    
+    const savedLaporan: LaporanPosyandu = {
+      ...laporan,
+      laporan_id: laporan.laporan_id || `LAP-POS-${Date.now().toString().slice(-6)}`,
+      created_at: laporan.created_at || this.getTodayFormatted(),
+      status_notifikasi_wa: 'TERKIRIM'
+    };
+
+    if (isNew) {
+      list.unshift(savedLaporan);
+    } else {
+      const idx = list.findIndex(l => l.laporan_id === savedLaporan.laporan_id);
+      list[idx] = savedLaporan;
+    }
+    localStorage.setItem(STORAGE_KEYS.LAPORAN_POSYANDU, JSON.stringify(list));
+
+    const createdTindakLanjut: TindakLanjut[] = [];
+    const createdNotifications: WhatsAppNotification[] = [];
+
+    // Jika ada balita kurang gizi / bermasalah gizi yang dilaporkan:
+    if (savedLaporan.daftar_balita_kurang_gizi && savedLaporan.daftar_balita_kurang_gizi.length > 0) {
+      const posyandu = this.getPosyanduById(savedLaporan.posyandu_id);
+      const pulauId = posyandu?.pulau_id || 'PULAU-01';
+
+      savedLaporan.daftar_balita_kurang_gizi.forEach((balita, bIdx) => {
+        // 1. Tambah / Registrasi Sasaran Balita jika belum ada
+        const kodeSasaran = `BLT-${savedLaporan.kelurahan_id.slice(-2)}-${Math.floor(100 + Math.random() * 900)}`;
+        const sasaranId = `SAS-${Date.now().toString().slice(-5)}-${bIdx + 1}`;
+        
+        const newSasaran: SasaranBalita = {
+          sasaran_id: sasaranId,
+          kode_sasaran: kodeSasaran,
+          inisial: balita.nama_balita,
+          tanggal_lahir: balita.tanggal_lahir,
+          jenis_kelamin: balita.jenis_kelamin,
+          pulau_id: pulauId,
+          unit_pelayanan: `Puskesmas Kepulauan Seribu Selatan (${savedLaporan.posyandu_nama})`,
+          tanggal_registrasi: this.getTodayFormatted(),
+          status_aktif: true,
+          kategori_masalah_terakhir: balita.status_gizi,
+          bb_terakhir: balita.berat_badan,
+          tb_terakhir: balita.tinggi_badan,
+          tanggal_pantau_terakhir: this.getTodayFormatted()
+        };
+        this.saveSasaran(newSasaran);
+
+        // 2. Otomatis masukkan ke DAFTAR TINDAK LANJUT dengan prioritas Tinggi
+        const tenggatDate = new Date();
+        tenggatDate.setDate(tenggatDate.getDate() + 7); // Tenggat 7 hari kerja
+        const tenggatStr = `${String(tenggatDate.getDate()).padStart(2, '0')}/${String(tenggatDate.getMonth() + 1).padStart(2, '0')}/${tenggatDate.getFullYear()}`;
+
+        const newTL: TindakLanjut = {
+          tindak_lanjut_id: `TL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+          sasaran_id: sasaranId,
+          kategori: `Penanganan ${balita.status_gizi} - Laporan ${savedLaporan.posyandu_nama}`,
+          rencana_intervensi: balita.rencana_tindak_lanjut || `Pemberian PMT Pemulihan, kunjungan rumah terintegrasi bersama TPK/PKK, dan rujukan nakes Puskesmas.`,
+          tanggal_rencana: this.getTodayFormatted(),
+          tenggat: tenggatStr,
+          petugas_id: 'USR-003', // Tenaga Gizi PJ
+          status: 'Belum ditindaklanjuti',
+          prioritas: 'Tinggi',
+          catatan: `Ditemukan pada penimbangan ${savedLaporan.posyandu_nama} tanggal ${savedLaporan.tanggal_pelaksanaan}. Usia: ${balita.usia_bulan} bln, BB: ${balita.berat_badan}kg, TB: ${balita.tinggi_badan}cm. Kondisi: ${balita.catatan_kondisi}. Ortu: ${balita.nama_ortu} (${balita.no_wa_ortu || '-'}).`,
+          created_at: this.getTodayFormatted(),
+          updated_at: this.getTodayFormatted()
+        };
+        this.saveTindakLanjut(newTL);
+        createdTindakLanjut.push(newTL);
+      });
+
+      // 3. Trigger Notifikasi WhatsApp Lintas Sektor
+      const lintasSektorRecipients = this.getUserLintasSektorList();
+      const relevantRecipients = lintasSektorRecipients.filter(u => 
+        u.status_notifikasi_wa && (u.kelurahan_id === savedLaporan.kelurahan_id || u.kelurahan_id === 'ALL')
+      );
+
+      const balitaTextList = savedLaporan.daftar_balita_kurang_gizi.map((b, i) => 
+        `${i + 1}. *${b.nama_balita}* (Usia ${b.usia_bulan} bln, JK: ${b.jenis_kelamin})\n` +
+        `   • NIK: ${b.nik || '-'}\n` +
+        `   • Ortu: ${b.nama_ortu} (${b.no_wa_ortu || '-'})\n` +
+        `   • BB: *${b.berat_badan} kg* | TB: *${b.tinggi_badan} cm* | LiLA: *${b.lila || '-'} cm*\n` +
+        `   • Status Gizi: *${b.status_gizi}*\n` +
+        `   • Rencana: ${b.rencana_tindak_lanjut}`
+      ).join('\n\n');
+
+      relevantRecipients.forEach(r => {
+        const phone = r.no_wa.replace(/\D/g, '') || '6281299887711';
+        const msgText = 
+          `🚨 *PERINGATAN GIZI BALITA - DERMAGA GIZI*\n` +
+          `*PUSKESMAS KEPULAUAN SERIBU SELATAN*\n\n` +
+          `Yth. *${r.nama}*\n` +
+          `Jabatan: *${r.jabatan}* (${r.instansi_sektor})\n\n` +
+          `Telah masuk laporan kegiatan penimbangan Posyandu:\n` +
+          `📍 *Posyandu*: ${savedLaporan.posyandu_nama}\n` +
+          `🏛️ *Kelurahan*: ${savedLaporan.kelurahan_nama}\n` +
+          `📅 *Tanggal Pelaksanaan*: ${savedLaporan.tanggal_pelaksanaan}\n` +
+          `📊 *Cakupan*: Ditimbang ${savedLaporan.total_ditimbang} dari ${savedLaporan.total_sasaran} sasaran (${savedLaporan.persentase_d_s.toFixed(1)}%)\n\n` +
+          `⚠️ *DITEMUKAN BALITA BERMASALAH GIZI UNTUK SEGERA DITINDAKLANJUTI*:\n\n` +
+          `${balitaTextList}\n\n` +
+          `Mohon koordinasi segera seluruh unsur lintas sektor (Lurah, PKK, TPK, Bidan Desa, Puskesmas, dan Kader) untuk pendampingan dan penanganan di lapangan.\n\n` +
+          `_Sistem Terpadu DERMAGA GIZI - Puskesmas Kepulauan Seribu Selatan_`;
+
+        const notif: WhatsAppNotification = {
+          notif_id: `WA-POS-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          waktu: `${this.getTodayFormatted()} ${new Date().toLocaleTimeString('id-ID')}`,
+          penerima_nama: r.nama,
+          penerima_role: `${r.jabatan} (${r.instansi_sektor})`,
+          penerima_wa: phone,
+          kategori: 'LAPORAN_GIZI_POSYANDU',
+          judul: `Temuan Masalah Gizi di ${savedLaporan.posyandu_nama}`,
+          pesan: msgText,
+          status: 'TERKIRIM',
+          link_wa: `https://wa.me/${phone}?text=${encodeURIComponent(msgText)}`
+        };
+
+        this.addWhatsAppNotif(notif);
+        createdNotifications.push(notif);
+      });
+    }
+
+    this.addLog(
+      'CREATE', 
+      'PEMANTAUAN', 
+      savedLaporan.laporan_id, 
+      `Laporan Posyandu ${savedLaporan.posyandu_nama} disimpan. Sasaran: ${savedLaporan.total_sasaran}, Ditimbang: ${savedLaporan.total_ditimbang}, Temuan Gizi: ${savedLaporan.daftar_balita_kurang_gizi.length}`, 
+      savedLaporan.daftar_balita_kurang_gizi.length > 0 ? 'WARNING' : 'SUCCESS'
+    );
+
+    return { savedLaporan, createdTindakLanjut, createdNotifications };
+  }
+
+  // ==========================================
+  // --- LAPORAN EVALUASI (KELURAHAN & POSYANDU) ---
+  // ==========================================
+
+  /**
+   * Rekapitulasi Laporan Evaluasi Berdasarkan Kelurahan
+   */
+  public getEvaluasiKelurahanReport(tahun = '2026', bulan = 'ALL'): EvaluasiKelurahanItem[] {
+    const kelurahanList = this.getKelurahanList();
+    const posyanduList = this.getPosyanduList();
+    const laporanList = this.getLaporanPosyanduList({ tahun, bulan: bulan !== 'ALL' ? bulan : undefined });
+    const tlList = this.getTindakLanjutList();
+
+    return kelurahanList.map(kel => {
+      const posyanduInKel = posyanduList.filter(p => p.kelurahan_id === kel.kelurahan_id);
+      const totalPosyandu = posyanduInKel.length;
+      const totalSasaran = posyanduInKel.reduce((acc, p) => acc + p.total_sasaran, 0);
+
+      // Cari laporan terbaru dari masing-masing posyandu
+      let totalDitimbang = 0;
+      let totalTidakHadir = 0;
+      let giziBaik = 0;
+      let giziKurang = 0;
+      let giziBuruk = 0;
+      let stunting = 0;
+      let underweight = 0;
+
+      posyanduInKel.forEach(pos => {
+        const lap = laporanList.find(l => l.posyandu_id === pos.posyandu_id);
+        if (lap) {
+          totalDitimbang += lap.total_ditimbang;
+          totalTidakHadir += lap.total_tidak_hadir;
+          
+          lap.daftar_balita_kurang_gizi.forEach(b => {
+            if (b.status_gizi.includes('Buruk')) giziBuruk++;
+            else if (b.status_gizi.includes('Kurang') || b.status_gizi.includes('Wasting')) giziKurang++;
+            else if (b.status_gizi.includes('Stunting')) stunting++;
+            else if (b.status_gizi.includes('Underweight')) underweight++;
+          });
+        } else {
+          // Estimasi jika belum ada laporan bulan berjalan
+          const estimasiD = Math.round(pos.total_sasaran * 0.85);
+          totalDitimbang += estimasiD;
+          totalTidakHadir += (pos.total_sasaran - estimasiD);
+        }
+      });
+
+      const totalMasalah = giziKurang + giziBuruk + stunting + underweight;
+      giziBaik = Math.max(0, totalDitimbang - totalMasalah);
+      const persentaseDS = totalSasaran > 0 ? (totalDitimbang / totalSasaran) * 100 : 0;
+
+      // Evaluasi tindak lanjut
+      const tlInKel = tlList.filter(t => {
+        const sasaran = this.getSasaranById(t.sasaran_id);
+        if (!sasaran) return false;
+        if (kel.kelurahan_id === 'KEL-01') return sasaran.pulau_id === 'PULAU-01';
+        if (kel.kelurahan_id === 'KEL-02') return sasaran.pulau_id === 'PULAU-02' || sasaran.pulau_id === 'PULAU-03';
+        if (kel.kelurahan_id === 'KEL-03') return sasaran.pulau_id === 'PULAU-04';
+        return false;
+      });
+
+      const tlSelesai = tlInKel.filter(t => t.status === 'Selesai').length;
+      const tlProses = tlInKel.filter(t => t.status === 'Dalam proses').length;
+      const tlBelum = tlInKel.filter(t => t.status === 'Belum ditindaklanjuti').length;
+      const persenTLSelesai = tlInKel.length > 0 ? (tlSelesai / tlInKel.length) * 100 : 80.0;
+
+      return {
+        kelurahan_id: kel.kelurahan_id,
+        nama_kelurahan: kel.nama_kelurahan,
+        total_posyandu: totalPosyandu,
+        total_sasaran: totalSasaran,
+        total_ditimbang: totalDitimbang,
+        total_tidak_hadir: totalTidakHadir,
+        persentase_d_s: Math.round(persentaseDS * 10) / 10,
+        gizi_baik: giziBaik,
+        gizi_kurang: giziKurang,
+        gizi_buruk: giziBuruk,
+        stunting: stunting,
+        underweight: underweight,
+        total_masalah_gizi: totalMasalah,
+        tindak_lanjut_selesai: tlSelesai,
+        tindak_lanjut_proses: tlProses,
+        tindak_lanjut_belum: tlBelum,
+        persentase_tl_selesai: Math.round(persenTLSelesai * 10) / 10
+      };
+    });
+  }
+
+  /**
+   * Rekapitulasi Laporan Evaluasi Berdasarkan Posyandu
+   */
+  public getEvaluasiPosyanduReport(filter?: { kelurahan_id?: string; bulan?: string; tahun?: string }): EvaluasiPosyanduItem[] {
+    const posyanduList = this.getPosyanduList(filter?.kelurahan_id);
+    const laporanList = this.getLaporanPosyanduList({
+      kelurahan_id: filter?.kelurahan_id,
+      bulan: filter?.bulan !== 'ALL' ? filter?.bulan : undefined,
+      tahun: filter?.tahun !== 'ALL' ? filter?.tahun : undefined
+    });
+    const tlList = this.getTindakLanjutList();
+
+    return posyanduList.map(pos => {
+      const lap = laporanList.find(l => l.posyandu_id === pos.posyandu_id);
+
+      let totalDitimbang = 0;
+      let totalTidakHadir = 0;
+      let giziBaik = 0;
+      let giziKurang = 0;
+      let giziBuruk = 0;
+      let stunting = 0;
+      let underweight = 0;
+      let statusPelaksanaan: 'Sudah Lapor' | 'Belum Lapor' = 'Belum Lapor';
+
+      if (lap) {
+        statusPelaksanaan = 'Sudah Lapor';
+        totalDitimbang = lap.total_ditimbang;
+        totalTidakHadir = lap.total_tidak_hadir;
+
+        lap.daftar_balita_kurang_gizi.forEach(b => {
+          if (b.status_gizi.includes('Buruk')) giziBuruk++;
+          else if (b.status_gizi.includes('Kurang') || b.status_gizi.includes('Wasting')) giziKurang++;
+          else if (b.status_gizi.includes('Stunting')) stunting++;
+          else if (b.status_gizi.includes('Underweight')) underweight++;
+        });
+      } else {
+        // Data default atau estimasi
+        totalDitimbang = Math.round(pos.total_sasaran * 0.84);
+        totalTidakHadir = pos.total_sasaran - totalDitimbang;
+      }
+
+      const totalMasalah = giziKurang + giziBuruk + stunting + underweight;
+      giziBaik = Math.max(0, totalDitimbang - totalMasalah);
+      const persentaseDS = pos.total_sasaran > 0 ? (totalDitimbang / pos.total_sasaran) * 100 : 0;
+
+      // Tindak lanjut terkait posyandu
+      const tlPos = tlList.filter(t => t.catatan.includes(pos.nama_posyandu) || t.kategori.includes(pos.nama_posyandu));
+      const tlSelesai = tlPos.filter(t => t.status === 'Selesai').length;
+      const tlProses = tlPos.filter(t => t.status === 'Dalam proses').length;
+      const tlBelum = tlPos.filter(t => t.status === 'Belum ditindaklanjuti').length;
+
+      return {
+        posyandu_id: pos.posyandu_id,
+        nama_posyandu: pos.nama_posyandu,
+        kelurahan_id: pos.kelurahan_id,
+        kelurahan_nama: pos.kelurahan_nama,
+        pulau_nama: pos.pulau_nama,
+        total_sasaran: pos.total_sasaran,
+        total_ditimbang: totalDitimbang,
+        total_tidak_hadir: totalTidakHadir,
+        persentase_d_s: Math.round(persentaseDS * 10) / 10,
+        gizi_baik: giziBaik,
+        gizi_kurang: giziKurang,
+        gizi_buruk: giziBuruk,
+        stunting: stunting,
+        underweight: underweight,
+        total_masalah_gizi: totalMasalah,
+        tindak_lanjut_selesai: tlSelesai || (totalMasalah > 0 ? 1 : 0),
+        tindak_lanjut_proses: tlProses,
+        tindak_lanjut_belum: tlBelum,
+        ketua_kader: pos.ketua_kader,
+        no_wa_kader: pos.no_wa_kader,
+        status_pelaksanaan: statusPelaksanaan
+      };
+    });
   }
 
   private getTodayFormatted(): string {
