@@ -844,6 +844,10 @@ class StorageService {
     pulau?: Pulau[];
     kendala?: Kendala[];
     lintas_sektor?: KegiatanLintasSektor[];
+    posyandu?: Posyandu[];
+    kelurahan?: Kelurahan[];
+    lintas_sektor_users?: UserLintasSektor[];
+    laporan_posyandu?: LaporanPosyandu[];
   }) {
     let changed = false;
     if (Array.isArray(gasData.sasaran) && gasData.sasaran.length > 0) {
@@ -866,6 +870,22 @@ class StorageService {
     }
     if (Array.isArray(gasData.lintas_sektor) && gasData.lintas_sektor.length > 0) {
       localStorage.setItem(STORAGE_KEYS.LINTAS_SEKTOR, JSON.stringify(gasData.lintas_sektor));
+      changed = true;
+    }
+    if (Array.isArray(gasData.posyandu) && gasData.posyandu.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.POSYANDU, JSON.stringify(gasData.posyandu));
+      changed = true;
+    }
+    if (Array.isArray(gasData.kelurahan) && gasData.kelurahan.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.KELURAHAN, JSON.stringify(gasData.kelurahan));
+      changed = true;
+    }
+    if (Array.isArray(gasData.lintas_sektor_users) && gasData.lintas_sektor_users.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.USER_LINTAS_SEKTOR, JSON.stringify(gasData.lintas_sektor_users));
+      changed = true;
+    }
+    if (Array.isArray(gasData.laporan_posyandu) && gasData.laporan_posyandu.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.LAPORAN_POSYANDU, JSON.stringify(gasData.laporan_posyandu));
       changed = true;
     }
     return changed;

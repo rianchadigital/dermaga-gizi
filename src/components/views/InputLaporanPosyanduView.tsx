@@ -36,6 +36,7 @@ import {
   TindakLanjut 
 } from '../../types';
 import { storageService } from '../../services/storageService';
+import { apiService } from '../../services/apiService';
 
 interface InputLaporanPosyanduViewProps {
   currentUser: User;
@@ -171,7 +172,7 @@ export const InputLaporanPosyanduView: React.FC<InputLaporanPosyanduViewProps> =
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccessMsg, setSubmitSuccessMsg] = useState('');
 
-  const handleSubmitLaporan = (e: React.FormEvent) => {
+  const handleSubmitLaporan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activePosyandu) return;
 
@@ -202,7 +203,7 @@ export const InputLaporanPosyanduView: React.FC<InputLaporanPosyanduViewProps> =
         created_by: currentUser.nama
       };
 
-      const res = storageService.saveLaporanPosyandu(newLaporan);
+      const res = await apiService.saveLaporanPosyandu(newLaporan);
       onRefreshData();
 
       // Jika ada balita kurang gizi, tampilkan modal broadcast WA

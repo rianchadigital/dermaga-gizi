@@ -126,28 +126,116 @@ class ApiService {
   }
 
   /**
-   * Inisialisasi Database Spreadsheet via Web App
+   * Menjalankan fungsi setupDatabase() otomatis di Google Spreadsheet via Web App
    */
-  public async initializeSpreadsheet(url?: string): Promise<ApiResponse> {
+  public async setupDatabase(url?: string): Promise<ApiResponse> {
     const targetUrl = (url || this.getBaseUrl()).trim();
     if (!targetUrl) {
       return {
         success: false,
-        message: 'URL Web App belum diisi.',
+        message: 'URL Web App belum diisi. Masukkan URL Web App Google Apps Script terlebih dahulu.',
         data: null
       };
     }
 
     try {
-      const endpoint = `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}action=init`;
+      const endpoint = `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}action=setupDatabase&_t=${Date.now()}`;
+      const res = await fetch(endpoint, { method: 'GET' });
+      const json = await res.json();
+      if (json && json.success) {
+        setTimeout(() => this.fetchDatabaseData(), 1000);
+      }
+      return json;
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `Gagal menjalankan setupDatabase: ${err.message}`,
+        data: null
+      };
+    }
+  }
+
+  /**
+   * Alias inisialisasi database spreadsheet
+   */
+  public async initializeSpreadsheet(url?: string): Promise<ApiResponse> {
+    return this.setupDatabase(url);
+  }
+
+  /**
+   * Menguji Pengiriman Pesan WhatsApp melalui Gateway Google Apps Script
+   */
+  public async testWhatsAppApi(phone: string, url?: string): Promise<ApiResponse> {
+    const targetUrl = (url || this.getBaseUrl()).trim();
+    if (!targetUrl) {
+      return {
+        success: false,
+        message: 'URL Google Apps Script belum dikonfigurasi.',
+        data: null
+      };
+    }
+
+    try {
+      const endpoint = `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}action=testWA&phone=${encodeURIComponent(phone)}&_t=${Date.now()}`;
       const res = await fetch(endpoint, { method: 'GET' });
       return await res.json();
     } catch (err: any) {
       return {
         success: false,
-        message: `Gagal inisialisasi spreadsheet: ${err.message}`,
+        message: `Gagal menguji WhatsApp API: ${err.message}`,
         data: null
       };
+    }
+  }
+
+  /**
+   * Mengirim Pesan WhatsApp Langsung melalui Apps Script Backend
+   */
+  public async sendWhatsAppViaBackend(phone: string, message: string): Promise<ApiResponse> {
+    if (!this.isConnected()) {
+      return {
+        success: false,
+        message: 'Aplikasi belum terhubung ke Google Apps Script Web App.',
+        data: null
+      };
+    }
+
+    try {
+      const res = await fetch(this.getBaseUrl(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'sendWhatsApp',
+          data: { phone, message }
+        })
+      });
+      return await res.json();
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `Gagal mengirim WhatsApp: ${err.message}`,
+        data: null
+      };
+    }
+  }
+
+  /**
+   * Menyimpan Konfigurasi (seperti token WA) ke Sheet KONFIGURASI
+   */
+  public async saveConfigToGas(key: string, value: string, deskripsi: string = ''): Promise<ApiResponse> {
+    if (!this.isConnected()) return { success: false, message: 'Belum terhubung', data: null };
+    try {
+      const res = await fetch(this.getBaseUrl(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'saveConfig',
+          data: { key, value, deskripsi }
+        })
+      });
+      return await res.json();
+    } catch (e: any) {
+      return { success: false, message: e.message, data: null };
     }
   }
 
@@ -256,6 +344,31 @@ class ApiService {
       }
     }
     return saved;
+  }
+
+  // --- Input Laporan Posyandu & Auto-Trigger Lintas Sektor ---
+  public async saveLaporanPosyandu(laporan: any): Promise<any> {
+    const result = storageService.saveLaporanPosyandu(laporan);
+
+    if (this.isConnected()) {
+      try {
+        const payload = {
+          action: 'createLaporanPosyandu',
+          data: result.savedLaporan,
+          user: storageService.getCurrentUser()
+        };
+        await fetch(this.getBaseUrl(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          mode: 'no-cors'
+        });
+        setTimeout(() => this.fetchDatabaseData(), 500);
+      } catch (e) {
+        console.warn('Gagal sinkronisasi remote Laporan Posyandu ke Google Apps Script:', e);
+      }
+    }
+    return result;
   }
 }
 
