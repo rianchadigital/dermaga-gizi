@@ -15,7 +15,8 @@ import {
   BalitaKurangGiziInput,
   EvaluasiKelurahanItem,
   EvaluasiPosyanduItem,
-  WhatsAppNotification
+  WhatsAppNotification,
+  TindakLanjutLintasSektor
 } from '../types';
 import { 
   INITIAL_USERS, 
@@ -1063,6 +1064,10 @@ class StorageService {
           petugas_id: 'USR-003', // Tenaga Gizi PJ
           status: 'Belum ditindaklanjuti',
           prioritas: 'Tinggi',
+          is_from_posyandu: true,
+          posyandu_nama: savedLaporan.posyandu_nama,
+          kelurahan_nama: savedLaporan.kelurahan_nama,
+          tindak_lanjut_lintas_sektor: [],
           catatan: `Ditemukan pada penimbangan ${savedLaporan.posyandu_nama} tanggal ${savedLaporan.tanggal_pelaksanaan}. Usia: ${balita.usia_bulan} bln, BB: ${balita.berat_badan}kg, TB: ${balita.tinggi_badan}cm. Kondisi: ${balita.catatan_kondisi}. Ortu: ${balita.nama_ortu} (${balita.no_wa_ortu || '-'}).`,
           created_at: this.getTodayFormatted(),
           updated_at: this.getTodayFormatted()
@@ -1295,6 +1300,107 @@ class StorageService {
         status_pelaksanaan: statusPelaksanaan
       };
     });
+  }
+
+  /**
+   * Mencatat tindak lanjut yang sudah dilakukan oleh unit lintas sektor
+   * serta otomatis mengirim notifikasi WhatsApp konfirmasi ke unit terkait dan pemangku kepentingan
+   */
+  addTindakLanjutLintasSektor(
+    tindakLanjutId: string, 
+    aksiItem: Omit<TindakLanjutLintasSektor, 'id' | 'created_at'>,
+    sendNotification: boolean = true
+  ): { updatedTL: TindakLanjut | null; notifications: WhatsAppNotification[] } {
+    const list = this.getTindakLanjutList({ pulau_id: 'ALL', tahun: 'ALL', bulan: 'ALL' });
+    const idx = list.findIndex(item => item.tindak_lanjut_id === tindakLanjutId);
+    if (idx === -1) return { updatedTL: null, notifications: [] };
+
+    const targetTL = { ...list[idx] };
+    const newAksi: TindakLanjutLintasSektor = {
+      ...aksiItem,
+      id: `TLLS-${Date.now()}-${Math.floor(Math.random() * 100)}`,
+      notifikasi_terkirim: sendNotification,
+      created_at: this.getTodayFormatted()
+    };
+
+    targetTL.tindak_lanjut_lintas_sektor = [
+      ...(targetTL.tindak_lanjut_lintas_sektor || []),
+      newAksi
+    ];
+
+    // Perbarui status umum tindak lanjut berdasarkan hasil aksi lintas sektor
+    if (aksiItem.status_hasil === 'Selesai') {
+      targetTL.status = 'Selesai';
+      targetTL.tanggal_selesai = aksiItem.tanggal_pelaksanaan;
+    } else if (aksiItem.status_hasil === 'Dalam proses') {
+      targetTL.status = 'Dalam proses';
+    } else if (aksiItem.status_hasil === 'Perlu evaluasi ulang') {
+      targetTL.status = 'Perlu evaluasi ulang';
+    }
+    targetTL.updated_at = this.getTodayFormatted();
+    list[idx] = targetTL;
+    localStorage.setItem(STORAGE_KEYS.TINDAK_LANJUT, JSON.stringify(list));
+
+    const sasaran = this.getSasaranById(targetTL.sasaran_id);
+    const notifications: WhatsAppNotification[] = [];
+
+    if (sendNotification) {
+      // Ambil penerima lintas sektor
+      const allLintas = this.getUserLintasSektorList();
+      // Unit pelaksana spesifik + Lurah + Camat + Dokter/Nutrisionis
+      const targets = allLintas.filter(u => 
+        u.status_notifikasi_wa && (
+          u.instansi_sektor.toLowerCase().includes(aksiItem.nama_unit.toLowerCase()) ||
+          u.jabatan.toLowerCase().includes('lurah') ||
+          u.jabatan.toLowerCase().includes('camat') ||
+          u.instansi_sektor.toLowerCase().includes('puskesmas') ||
+          u.instansi_sektor.toLowerCase().includes('pkk')
+        )
+      );
+
+      const balitaName = sasaran ? `${sasaran.kode_sasaran} (${sasaran.inisial})` : 'Balita Binaan Posyandu';
+      const pesan = 
+        `✅ *UPDATE TINDAK LANJUT LINTAS SEKTOR - DERMAGA GIZI*\n` +
+        `*PUSKESMAS KEPULAUAN SERIBU SELATAN*\n\n` +
+        `Laporan Aksi Penanganan Permasalahan Gizi Balita:\n` +
+        `👶 *Sasaran*: ${balitaName}\n` +
+        `📋 *Masalah/Kategori*: ${targetTL.kategori}\n\n` +
+        `🏛️ *Unit Lintas Sektor*: *${aksiItem.nama_unit}*\n` +
+        `👤 *Petugas/Penanggung Jawab*: *${aksiItem.nama_petugas}*\n` +
+        `📅 *Tanggal Pelaksanaan*: ${aksiItem.tanggal_pelaksanaan}\n` +
+        `⚡ *Aksi Nyata*: ${aksiItem.aksi_intervensi}\n` +
+        `📊 *Status Hasil*: *${aksiItem.status_hasil}*\n` +
+        `📝 *Catatan Evaluasi*: ${aksiItem.catatan_evaluasi}\n\n` +
+        `_Terima kasih atas kolaborasi dan sinergi lintas sektor demi masa depan anak-anak sehat bebas stunting di Kepulauan Seribu Selatan._`;
+
+      targets.forEach(t => {
+        const phone = t.no_wa.replace(/\D/g, '') || '6281299887711';
+        const notif: WhatsAppNotification = {
+          notif_id: `NOTIF-TL-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+          waktu: `${this.getTodayFormatted()} ${new Date().toLocaleTimeString('id-ID')}`,
+          penerima_nama: t.nama,
+          penerima_role: `${t.jabatan} (${t.instansi_sektor})`,
+          penerima_wa: phone,
+          kategori: 'LAPORAN_GIZI_POSYANDU',
+          judul: `✅ Konfirmasi Tindak Lanjut: ${balitaName}`,
+          pesan: pesan,
+          status: 'TERKIRIM',
+          link_wa: `https://wa.me/${phone}?text=${encodeURIComponent(pesan)}`
+        };
+        notifications.push(notif);
+        this.addWhatsAppNotif(notif);
+      });
+
+      this.addLog(
+        'UPDATE', 
+        'TINDAK_LANJUT', 
+        targetTL.tindak_lanjut_id, 
+        `Aksi tindak lanjut lintas sektor dicatat oleh ${aksiItem.nama_unit} (${aksiItem.nama_petugas}) untuk ${balitaName}`, 
+        'SUCCESS'
+      );
+    }
+
+    return { updatedTL: targetTL, notifications };
   }
 
   private getTodayFormatted(): string {

@@ -122,6 +122,21 @@ export type StatusTindakLanjut =
 
 export type Prioritas = 'Tinggi' | 'Sedang' | 'Rendah';
 
+export interface TindakLanjutLintasSektor {
+  id: string;
+  unit_sektor: string; // 'Puskesmas' | 'Kelurahan' | 'TP_PKK' | 'TPK_STUNTING' | 'DINSOS' | 'KUA' | 'KECAMATAN'
+  nama_unit: string;
+  nama_petugas: string;
+  jabatan?: string;
+  no_wa?: string;
+  aksi_intervensi: string;
+  tanggal_pelaksanaan: string;
+  status_hasil: 'Selesai' | 'Dalam proses' | 'Perlu evaluasi ulang';
+  catatan_evaluasi: string;
+  notifikasi_terkirim?: boolean;
+  created_at: string;
+}
+
 export interface TindakLanjut {
   tindak_lanjut_id: string;
   sasaran_id: string;
@@ -137,6 +152,10 @@ export interface TindakLanjut {
   catatan: string;
   bukti_dukung?: string;
   alasan_pembatalan?: string;
+  is_from_posyandu?: boolean;
+  posyandu_nama?: string;
+  kelurahan_nama?: string;
+  tindak_lanjut_lintas_sektor?: TindakLanjutLintasSektor[];
   created_at: string;
   updated_at: string;
 }

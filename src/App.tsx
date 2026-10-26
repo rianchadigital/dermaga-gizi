@@ -96,26 +96,23 @@ export default function App() {
     setRefreshKey(prev => prev + 1);
   }, []);
 
-  // Live Auto-Refresh Polling Interval Setiap 3 Detik ke Database
+  // Live Auto-Refresh Polling Interval jika tersambung dengan Remote / Cloud Database
   useEffect(() => {
     if (!autoRefresh) return;
+    // Jangan polling loop render jika di mode lokal agar modal dan form tidak hilang
+    if (!apiService.isConnected()) return;
 
     const interval = setInterval(async () => {
-      if (apiService.isConnected()) {
-        setIsSyncing(true);
-        try {
-          const changed = await apiService.fetchDatabaseData();
-          if (changed) {
-            handleRefreshData();
-          }
-        } finally {
-          setIsSyncing(false);
+      setIsSyncing(true);
+      try {
+        const changed = await apiService.fetchDatabaseData();
+        if (changed) {
+          handleRefreshData();
         }
-      } else {
-        // Mode Demo: refresh state internal jika ada perubahan
-        handleRefreshData();
+      } finally {
+        setIsSyncing(false);
       }
-    }, 3000);
+    }, 10000);
 
     return () => clearInterval(interval);
   }, [autoRefresh, handleRefreshData]);
@@ -185,7 +182,6 @@ export default function App() {
         <main className="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto">
           {activeTab === 'dashboard' && (
             <DashboardView
-              key={refreshKey}
               filter={filter}
               setFilter={setFilter}
               pulauList={pulauList}
@@ -196,7 +192,6 @@ export default function App() {
 
           {activeTab === 'map' && (
             <MapView
-              key={refreshKey}
               filter={filter}
               setFilter={setFilter}
               pulauList={pulauList}
@@ -207,7 +202,6 @@ export default function App() {
 
           {activeTab === 'input-posyandu' && (
             <InputLaporanPosyanduView
-              key={refreshKey}
               currentUser={currentUser}
               onRefreshData={handleRefreshData}
               onNavigateTab={handleNavigateTab}
@@ -216,7 +210,6 @@ export default function App() {
 
           {activeTab === 'master-posyandu' && (
             <MasterPosyanduView
-              key={refreshKey}
               currentUser={currentUser}
               onRefreshData={handleRefreshData}
             />
@@ -224,7 +217,6 @@ export default function App() {
 
           {activeTab === 'master-lintas-sektor' && (
             <MasterLintasSektorView
-              key={refreshKey}
               currentUser={currentUser}
               onRefreshData={handleRefreshData}
             />
@@ -232,7 +224,6 @@ export default function App() {
 
           {activeTab === 'sasaran' && (
             <SasaranView
-              key={refreshKey}
               filter={filter}
               setFilter={setFilter}
               pulauList={pulauList}
@@ -243,7 +234,6 @@ export default function App() {
 
           {activeTab === 'tindak-lanjut' && (
             <TindakLanjutView
-              key={refreshKey}
               filter={filter}
               setFilter={setFilter}
               pulauList={pulauList}
@@ -255,7 +245,6 @@ export default function App() {
 
           {activeTab === 'kinerja-role' && (
             <KinerjaRoleView
-              key={refreshKey}
               currentUser={currentUser}
               onRefreshData={handleRefreshData}
               onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
@@ -264,7 +253,6 @@ export default function App() {
 
           {activeTab === 'kendala' && (
             <KendalaView
-              key={refreshKey}
               filter={filter}
               pulauList={pulauList}
               currentUser={currentUser}
@@ -274,7 +262,6 @@ export default function App() {
 
           {activeTab === 'lintas-sektor' && (
             <LintasSektorView
-              key={refreshKey}
               filter={filter}
               pulauList={pulauList}
               currentUser={currentUser}
@@ -284,7 +271,6 @@ export default function App() {
 
           {activeTab === 'laporan' && (
             <LaporanView
-              key={refreshKey}
               filter={filter}
               setFilter={setFilter}
               pulauList={pulauList}
@@ -294,7 +280,6 @@ export default function App() {
 
           {activeTab === 'master' && (
             <DataMasterView
-              key={refreshKey}
               pulauList={pulauList}
               currentUser={currentUser}
               onRefreshData={handleRefreshData}
@@ -303,7 +288,6 @@ export default function App() {
 
           {activeTab === 'users' && (
             <UsersView
-              key={refreshKey}
               users={users}
               currentUser={currentUser}
               onSwitchUser={handleSwitchUser}
@@ -312,12 +296,11 @@ export default function App() {
           )}
 
           {activeTab === 'panduan' && (
-            <PanduanView key={refreshKey} />
+            <PanduanView />
           )}
 
           {activeTab === 'settings' && (
             <SettingsView
-              key={refreshKey}
               onRefreshData={handleRefreshData}
             />
           )}
