@@ -97,6 +97,16 @@ export interface SasaranBalita {
   bb_terakhir?: number; // kg
   tb_terakhir?: number; // cm
   tanggal_pantau_terakhir?: string;
+  bulan_pengukuran?: string; // e.g. "Oktober 2026"
+  posyandu?: string; // e.g. "Posyandu Cempaka 1"
+  kelurahan_id?: string;
+  kelurahan_nama?: string;
+  nik?: string;
+  nama_ortu?: string;
+  no_wa_ortu?: string;
+  alamat?: string;
+  rt_rw?: string;
+  lila?: number; // cm
 }
 
 export interface Pemantauan {
@@ -124,7 +134,7 @@ export type Prioritas = 'Tinggi' | 'Sedang' | 'Rendah';
 
 export interface TindakLanjutLintasSektor {
   id: string;
-  unit_sektor: string; // 'Puskesmas' | 'Kelurahan' | 'TP_PKK' | 'TPK_STUNTING' | 'DINSOS' | 'KUA' | 'KECAMATAN'
+  unit_sektor: string; // 'Kader' | 'Kecamatan' | 'Petugas' | 'Kelurahan' | 'PKK' | 'Puskesmas' | etc.
   nama_unit: string;
   nama_petugas: string;
   jabatan?: string;
@@ -133,6 +143,8 @@ export interface TindakLanjutLintasSektor {
   tanggal_pelaksanaan: string;
   status_hasil: 'Selesai' | 'Dalam proses' | 'Perlu evaluasi ulang';
   catatan_evaluasi: string;
+  foto_dokumen?: string; // Base64 data URI atau URL foto bukti intervensi
+  foto_nama?: string;
   notifikasi_terkirim?: boolean;
   created_at: string;
 }
@@ -151,6 +163,8 @@ export interface TindakLanjut {
   tanggal_selesai?: string;
   catatan: string;
   bukti_dukung?: string;
+  foto_dokumen?: string; // Base64 data URI foto bukti dokumen
+  foto_nama?: string;
   alasan_pembatalan?: string;
   is_from_posyandu?: boolean;
   posyandu_nama?: string;

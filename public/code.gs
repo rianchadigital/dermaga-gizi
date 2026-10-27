@@ -1,38 +1,42 @@
 /**
  * =========================================================================================
- * DERMAGA GIZI - GOOGLE APPS SCRIPT BACKEND & WHATSAPP API (Code.gs)
+ * DERMAGA GIZI - GOOGLE APPS SCRIPT BACKEND & WHATSAPP GATEWAY (Code.gs)
  * Puskesmas Kepulauan Seribu Selatan - Provinsi DKI Jakarta
  * =========================================================================================
  * 
+ * CATATAN PENTING:
+ * Kode ini 100% BERFOKUS PADA DATA SPREADSHEET (Clean Database, Tanpa Dummy Data Hardcoded).
+ * Seluruh data sasaran, pemantauan, posyandu, kelurahan, dan pengguna dibaca langsung
+ * dari baris-baris sheet Google Spreadsheet Anda.
+ * 
  * FITUR UTAMA:
- * 1. setupDatabase() / initializeDatabase() : Pembuatan seluruh sheet, kolom header, 
- *    dan data master awal (Kelurahan, Posyandu, Lintas Sektor, Pengguna) secara OTOMATIS.
- * 2. API WhatsApp Gateway : Pengiriman notifikasi otomatis langsung ke nomor WhatsApp
- *    para pimpinan & anggota lintas sektor (Lurah, Camat, TP PKK, TPK, Puskesmas, Kader).
- *    Mendukung Fonnte, Wablas, dan Webhook kustom dengan normalisasi nomor internasional (628...).
- * 3. Notifikasi Otomatis : Trigger pengiriman WhatsApp saat kader/petugas menginput temuan
- *    balita stunting, gizi kurang, wasting, atau saat lintas sektor melakukan tindak lanjut.
- * 4. Web App API (doGet & doPost) : Sinkronisasi data dua arah dengan frontend React.
- * 5. Menu Kustom Spreadsheet : Menu "⛵ DERMAGA GIZI" langsung di menu bar Google Spreadsheet.
+ * 1. setupDatabase() : Otomatis membuat 13 sheet beserta header baku, format warna Navy,
+ *    dan baris beku (freeze row 1). TANPA mengisi data tiruan/dummy.
+ * 2. clearAllDataRows() : Membersihkan seluruh baris data di semua tabel sheet sekaligus
+ *    dan hanya menyisakan header baris 1 (dapat dijalankan langsung dari menu Spreadsheet).
+ * 3. CRUD Real-Time : Membaca dan menyimpan data Sasaran, Laporan Posyandu, Tindak Lanjut,
+ *    Kendala, dan Master langsung ke baris Google Spreadsheet.
+ * 4. WhatsApp API Gateway : Pengiriman otomatis notifikasi broadcast ke nomor WhatsApp
+ *    para pejabat & tim lintas sektor (Lurah, Camat, Puskesmas, TP PKK, Kader) yang tersimpan
+ *    pada sheet MASTER_LINTAS_SEKTOR.
+ * 5. Menu Bar Google Spreadsheet : Menu "⛵ DERMAGA GIZI" dengan tombol cepat langsung di Sheets.
  * 
  * CARA PEMASANGAN DI GOOGLE SPREADSHEET:
- * 1. Buka Google Spreadsheet baru di https://sheets.new (atau gunakan spreadsheet yang sudah ada).
+ * 1. Buka Google Spreadsheet di https://sheets.new (atau spreadsheet yang sudah Anda miliki).
  * 2. Klik menu "Ekstensi" (Extensions) > "Apps Script".
- * 3. Hapus seluruh kode bawaan yang ada di editor, lalu TEMPEL SELURUH KODE FILE INI.
- * 4. Klik tombol Simpan (ikon disket / Ctrl+S).
- * 5. Pilih fungsi 'setupDatabase' dari dropdown fungsi di bagian atas editor, lalu klik "Jalankan" (Run).
- *    -> Berikan izin akses Google (Review Permissions > Pilih Akun > Advanced > Go to Untitled (unsafe) > Allow).
- *    -> Seluruh sheet (13 sheet) beserta header dan data master akan dibuat otomatis!
- * 6. Untuk mengaktifkan Web App:
- *    - Klik tombol "Terapkan" (Deploy) di sudut kanan atas > "Penerapan baru" (New deployment).
+ * 3. Hapus seluruh isi editor bawaan, lalu SALIN & TEMPEL SELURUH KODE FILE INI.
+ * 4. Klik ikon Simpan (Ctrl+S).
+ * 5. Pilih fungsi 'setupDatabase' dari dropdown fungsi di atas, lalu klik "Jalankan" (Run).
+ *    -> Berikan izin akses Google (Review Permissions > Akun Anda > Advanced > Buka (tidak aman) > Izinkan).
+ *    -> Seluruh sheet database akan terbentuk bersih dengan header siap pakai!
+ * 6. Jika spreadsheet sebelumnya sudah berisi data sampel/dummy yang ingin dibersihkan:
+ *    -> Jalankan fungsi 'clearAllDataRows' atau klik menu "⛵ DERMAGA GIZI" > "🧹 Bersihkan Semua Data".
+ * 7. Deploy Web App:
+ *    - Klik "Terapkan" (Deploy) > "Penerapan baru" (New deployment).
  *    - Pilih jenis: "Aplikasi web" (Web app).
- *    - Konfigurasi:
- *        * Deskripsi: "DERMAGA GIZI Production v2.0"
- *        * Jalankan sebagai (Execute as): "Saya" (Me - akun Google Anda)
- *        * Yang memiliki akses (Who has access): "Siapa saja" (Anyone) -> WAJIB agar web app bisa terhubung!
- *    - Klik "Terapkan" (Deploy).
- *    - Salin "URL Aplikasi Web" (berakhiran /exec).
- *    - Masukkan URL tersebut ke aplikasi DERMAGA GIZI di menu "Pengaturan Sistem" > "Integrasi Google Spreadsheet".
+ *    - Jalankan sebagai (Execute as): "Saya" (Me)
+ *    - Yang memiliki akses (Who has access): "Siapa saja" (Anyone) -> WAJIB!
+ *    - Klik "Terapkan", salin URL Web App (/exec), lalu masukkan ke menu Pengaturan di web Dermaga Gizi.
  * =========================================================================================
  */
 
@@ -56,7 +60,7 @@ var SHEETS = {
 };
 
 // ==========================================
-// STRUKTUR HEADER KOLOM BAKU
+// STRUKTUR HEADER KOLOM BAKU (BARIS 1)
 // ==========================================
 var HEADERS = {
   USERS: [
@@ -106,7 +110,8 @@ var HEADERS = {
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu('⛵ DERMAGA GIZI')
-    .addItem('🚀 Setup Database Otomatis (setupDatabase)', 'setupDatabase')
+    .addItem('🚀 Setup Database & Header (setupDatabase)', 'setupDatabase')
+    .addItem('🧹 Bersihkan Semua Data (Hanya Sisakan Header)', 'clearAllDataRows')
     .addSeparator()
     .addItem('📱 Tes Koneksi WhatsApp API', 'menuTestWhatsApp')
     .addItem('👥 Kirim Notifikasi Tes ke Lintas Sektor', 'menuBroadcastTestWhatsApp')
@@ -118,8 +123,11 @@ function onOpen() {
 
 /**
  * =========================================================================================
- * 1. SETUP DATABASE OTOMATIS (setupDatabase / initializeDatabase)
+ * 1. SETUP DATABASE BERSIH (setupDatabase / initializeDatabase)
  * =========================================================================================
+ * Membuat semua sheet database yang diperlukan jika belum ada.
+ * Mengisi baris header warna navy (#0f2b48) dan membekukan baris pertama (frozen row 1).
+ * HANYA menginisialisasi sheet KONFIGURASI sistem tanpa memasukkan data dummy/sampel.
  */
 function setupDatabase() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -134,22 +142,22 @@ function setupDatabase() {
       sheet = ss.insertSheet(sheetName);
       sheet.appendRow(cols);
       formatHeaderRow(sheet, cols.length);
-      log.push('✅ Dibuat baru: ' + sheetName);
+      log.push('✅ Sheet baru dibuat: ' + sheetName);
     } else {
       if (sheet.getLastRow() === 0) {
         sheet.appendRow(cols);
         formatHeaderRow(sheet, cols.length);
         log.push('🔹 Header ditambahkan ke: ' + sheetName);
       } else {
-        log.push('✔ Sudah ada: ' + sheetName);
+        log.push('✔ Sheet sudah aktif: ' + sheetName);
       }
     }
   }
 
-  // Isi data awal standar jika sheet masih kosong
-  seedInitialData(ss);
+  // Inisialisasi parameter konfigurasi dasar sistem di sheet KONFIGURASI
+  initConfigSheet(ss);
 
-  // Buat sheet default terhapus jika kosong
+  // Rapikan sheet bawaan jika kosong
   var defaultSheet = ss.getSheetByName('Sheet1') || ss.getSheetByName('Sheet 1');
   if (defaultSheet && ss.getSheets().length > 1 && defaultSheet.getLastRow() <= 1) {
     try {
@@ -157,16 +165,16 @@ function setupDatabase() {
     } catch (e) {}
   }
 
-  var msg = 'Inisialisasi Database DERMAGA GIZI Berhasil!\n\n' + log.join('\n');
+  var msg = 'Inisialisasi Database Bersih Berhasil!\n\n' + log.join('\n');
   Logger.log(msg);
 
   try {
-    SpreadsheetApp.getActiveSpreadsheet().toast('Database DERMAGA GIZI siap digunakan!', 'Sukses', 5);
+    ss.toast('Setup database DERMAGA GIZI selesai! Header siap menerima data.', 'Sukses', 5);
   } catch (e) {}
 
   return {
     success: true,
-    message: 'Setup database DERMAGA GIZI berhasil dijalankan.',
+    message: 'Setup database DERMAGA GIZI berhasil dijalankan. Struktur sheet dan header siap digunakan.',
     data: {
       log: log,
       spreadsheetId: ss.getId(),
@@ -177,14 +185,18 @@ function setupDatabase() {
   };
 }
 
+// Alias untuk kompatibilitas
 function initializeDatabase() {
   return setupDatabase();
 }
 
+/**
+ * Styling header baris 1
+ */
 function formatHeaderRow(sheet, colCount) {
   var range = sheet.getRange(1, 1, 1, colCount);
   range.setFontWeight('bold');
-  range.setBackground('#0f2b48');
+  range.setBackground('#0f2b48'); // Navy Bahari Dermaga Gizi
   range.setFontColor('#ffffff');
   range.setFontFamily('Arial');
   range.setFontSize(10);
@@ -198,8 +210,10 @@ function formatHeaderRow(sheet, colCount) {
   }
 }
 
-function seedInitialData(ss) {
-  // 1. KONFIGURASI
+/**
+ * Inisialisasi Konfigurasi Sistem (Hanya konfigurasi Gateway & Faskes, bukan data balita/dummy)
+ */
+function initConfigSheet(ss) {
   var configSheet = ss.getSheetByName(SHEETS.KONFIGURASI);
   if (configSheet && configSheet.getLastRow() <= 1) {
     var nowStr = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'dd/MM/yyyy HH:mm:ss');
@@ -207,10 +221,10 @@ function seedInitialData(ss) {
       ['APP_NAME', 'DERMAGA GIZI', 'Nama Sistem Terpadu Monitoring Gizi', nowStr],
       ['INSTANSI', 'Puskesmas Kepulauan Seribu Selatan', 'Faskes Penanggung Jawab', nowStr],
       ['WA_GATEWAY_PROVIDER', 'FONNTE', 'Pilihan gateway: FONNTE, WABLAS, atau WEBHOOK', nowStr],
-      ['WA_API_TOKEN', 'YOUR_FONNTE_TOKEN_HERE', 'Token API WhatsApp (Dapatkan gratis di https://fonnte.com)', nowStr],
-      ['WA_ADMIN_PHONE', '6281299887711', 'Nomor WhatsApp Admin / Koordinator Gizi', nowStr],
+      ['WA_API_TOKEN', '', 'Token API WhatsApp Gateway (Dapatkan di fonnte.com)', nowStr],
+      ['WA_ADMIN_PHONE', '', 'Nomor WhatsApp Admin / Koordinator Gizi (contoh: 6281299887711)', nowStr],
       ['WA_NOTIF_AUTO_SEND', 'TRUE', 'Kirim WA otomatis saat ada input kasus gizi (TRUE/FALSE)', nowStr],
-      ['WA_WEBHOOK_URL', '', 'URL Webhook khusus jika menggunakan provider sendiri', nowStr],
+      ['WA_WEBHOOK_URL', '', 'URL Webhook khusus jika menggunakan server sendiri', nowStr],
       ['APP_URL', 'https://dermagagizi.puskesmasseribuselatan.com', 'URL Web Aplikasi Produksi', nowStr],
       ['TIMEZONE', 'Asia/Jakarta', 'Zona Waktu Standar Operasional', nowStr]
     ];
@@ -218,100 +232,73 @@ function seedInitialData(ss) {
       configSheet.appendRow(defaultConfigs[i]);
     }
   }
+}
 
-  // 2. MASTER PULAU
-  var pulauSheet = ss.getSheetByName(SHEETS.PULAU);
-  if (pulauSheet && pulauSheet.getLastRow() <= 1) {
-    var defaultPulau = [
-      ['PULAU-01', 'Pulau Tidung', 'Puskesmas Kepulauan Seribu Selatan', -5.8032, 106.5235, 'Mudah', 'Pusat kecamatan dan faskes rujukan tingkat pertama utama wilayah selatan.', true],
-      ['PULAU-02', 'Pulau Pari', 'Puskesmas Pembantu Pulau Pari', -5.8564, 106.6198, 'Sedang', 'Akses perahu reguler 40 menit dari dermaga Tidung, pos gizi aktif.', true],
-      ['PULAU-03', 'Pulau Lancang', 'Puskesmas Pembantu Pulau Lancang', -5.8902, 106.5898, 'Tergantung Cuaca/Gelombang', 'Transportasi mengandalkan kapal nelayan & perahu dinas keliling.', true],
-      ['PULAU-04', 'Pulau Untung Jawa', 'Puskesmas Pembantu Pulau Untung Jawa', -5.9781, 106.7052, 'Mudah', 'Dekat dengan pesisir utara daratan Jakarta/Tangerang, dermaga feri aktif.', true]
-    ];
-    for (var p = 0; p < defaultPulau.length; p++) {
-      pulauSheet.appendRow(defaultPulau[p]);
+/**
+ * =========================================================================================
+ * 2. BERSIHKAN SEMUA DATA BARIS (clearAllDataRows)
+ * =========================================================================================
+ * Menghapus seluruh baris data (baris 2 ke bawah) di SEMUA sheet database.
+ * Menyisakan BARIS 1 (Header Kolom) agar struktur tabel tetap utuh dan rapi.
+ * Sheet KONFIGURASI dipertahankan agar token WA tidak hilang.
+ */
+function clearAllDataRows() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var clearedSheets = [];
+  var totalRowsCleared = 0;
+
+  for (var key in SHEETS) {
+    var sheetName = SHEETS[key];
+    // Pertahankan KONFIGURASI agar token WhatsApp tidak terhapus
+    if (sheetName === SHEETS.KONFIGURASI) continue;
+
+    var sheet = ss.getSheetByName(sheetName);
+    if (sheet) {
+      var lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        var numRowsToDelete = lastRow - 1;
+        sheet.deleteRows(2, numRowsToDelete);
+        totalRowsCleared += numRowsToDelete;
+        clearedSheets.push(sheetName + ' (' + numRowsToDelete + ' baris)');
+      } else {
+        clearedSheets.push(sheetName + ' (sudah kosong)');
+      }
     }
   }
 
-  // 3. MASTER KELURAHAN
-  var kelSheet = ss.getSheetByName(SHEETS.MASTER_KELURAHAN);
-  if (kelSheet && kelSheet.getLastRow() <= 1) {
-    var defaultKel = [
-      ['KEL-01', 'Kelurahan Pulau Tidung', 'Kepulauan Seribu Selatan', 'Pulau Tidung, Pulau Payung', 'Hafisurrahman, S.STP, M.Si', '6281288991122', 4, 16, 210],
-      ['KEL-02', 'Kelurahan Pulau Pari', 'Kepulauan Seribu Selatan', 'Pulau Pari, Pulau Lancang', 'M. Adriansyah, S.IP', '6281311554433', 4, 14, 160],
-      ['KEL-03', 'Kelurahan Pulau Untung Jawa', 'Kepulauan Seribu Selatan', 'Pulau Untung Jawa', 'Sidik Riyanto, S.AP', '6281988223311', 3, 9, 110]
-    ];
-    for (var k = 0; k < defaultKel.length; k++) {
-      kelSheet.appendRow(defaultKel[k]);
-    }
+  var msg = 'Pembersihan Data Berhasil!\n\n' +
+            'Total baris data yang dibersihkan: ' + totalRowsCleared + '\n' +
+            'Semua header kolom dipertahankan.\n\n' +
+            'Detail Sheet:\n• ' + clearedSheets.join('\n• ');
+  Logger.log(msg);
+
+  try {
+    SpreadsheetApp.getUi().alert('Pembersihan Data Selesai', msg, SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch (e) {
+    try {
+      ss.toast('Semua data demo telah dibersihkan! Hanya header yang tersisa.', 'Selesai', 5);
+    } catch (err) {}
   }
 
-  // 4. MASTER POSYANDU
-  var posSheet = ss.getSheetByName(SHEETS.MASTER_POSYANDU);
-  if (posSheet && posSheet.getLastRow() <= 1) {
-    var defaultPos = [
-      ['POS-01', 'Posyandu Melati 1', 'KEL-01', 'Kelurahan Pulau Tidung', 'PULAU-01', 'Pulau Tidung', 'RW 01', 'RT 01 - RT 04', 'Balai Warga RW 01, Jl. Dermaga Timur, Pulau Tidung', 'Ibu Aminah', '6281298765431', 5, 'Senin Minggu ke-1', 55, true],
-      ['POS-02', 'Posyandu Melati 2', 'KEL-01', 'Kelurahan Pulau Tidung', 'PULAU-01', 'Pulau Tidung', 'RW 02', 'RT 01 - RT 04', 'RPTRA Tidung Ceria, Pulau Tidung', 'Ibu Rosmalia', '6281298765432', 5, 'Rabu Minggu ke-1', 50, true],
-      ['POS-03', 'Posyandu Cempaka 1', 'KEL-01', 'Kelurahan Pulau Tidung', 'PULAU-01', 'Pulau Tidung', 'RW 03', 'RT 01 - RT 04', 'Pos RW 03, Pulau Tidung Barat', 'Ibu Nurjanah', '6281298765433', 5, 'Jumat Minggu ke-1', 52, true],
-      ['POS-04', 'Posyandu Cempaka 2', 'KEL-01', 'Kelurahan Pulau Tidung', 'PULAU-01', 'Pulau Tidung', 'RW 04', 'RT 01 - RT 04', 'Gedung Serbaguna Pulau Payung / Tidung', 'Ibu Rusmini', '6281298765434', 4, 'Selasa Minggu ke-2', 53, true],
-      ['POS-05', 'Posyandu Flamboyan 1', 'KEL-02', 'Kelurahan Pulau Pari', 'PULAU-02', 'Pulau Pari', 'RW 01', 'RT 01 - RT 03', 'Kantor Kelurahan Pulau Pari / Pos RW 01', 'Ibu Rohani', '6285712345678', 5, 'Senin Minggu ke-2', 45, true],
-      ['POS-06', 'Posyandu Flamboyan 2', 'KEL-02', 'Kelurahan Pulau Pari', 'PULAU-02', 'Pulau Pari', 'RW 02', 'RT 01 - RT 04', 'RPTRA Pasir Perawan, Pulau Pari', 'Ibu Supartini', '6285712345679', 5, 'Rabu Minggu ke-2', 40, true],
-      ['POS-07', 'Posyandu Mawar', 'KEL-02', 'Kelurahan Pulau Pari', 'PULAU-03', 'Pulau Lancang', 'RW 03', 'RT 01 - RT 06', 'Gedung Pustu & Pos Gizi Pulau Lancang', 'Ibu Maryanah', '6287811998877', 6, 'Kamis Minggu ke-3', 75, true],
-      ['POS-08', 'Posyandu Anggrek', 'KEL-03', 'Kelurahan Pulau Untung Jawa', 'PULAU-04', 'Pulau Untung Jawa', 'RW 01', 'RT 01 - RT 05', 'Gedung Sasana Budaya RW 01, Untung Jawa', 'Ibu Siti Aisyah', '6281299884433', 5, 'Senin Minggu ke-3', 58, true],
-      ['POS-09', 'Posyandu Kenanga', 'KEL-03', 'Kelurahan Pulau Untung Jawa', 'PULAU-04', 'Pulau Untung Jawa', 'RW 02 & RW 03', 'RT 01 - RT 04', 'Pos Pelayanan Terpadu RW 02, Untung Jawa', 'Ibu Fatimah Zahra', '6281377889900', 5, 'Rabu Minggu ke-3', 52, true]
-    ];
-    for (var po = 0; po < defaultPos.length; po++) {
-      posSheet.appendRow(defaultPos[po]);
-    }
-  }
-
-  // 5. MASTER LINTAS SEKTOR
-  var lsUserSheet = ss.getSheetByName(SHEETS.MASTER_LINTAS_SEKTOR);
-  if (lsUserSheet && lsUserSheet.getLastRow() <= 1) {
-    var defaultLs = [
-      ['ULS-001', 'Hafisurrahman, S.STP, M.Si', 'Lurah Pulau Tidung', 'Kelurahan Pulau Tidung', 'KEL-01', 'Kelurahan Pulau Tidung', '6281288991122', 'lurah.tidung@seribu.jakarta.go.id', true, true],
-      ['ULS-002', 'M. Adriansyah, S.IP', 'Lurah Pulau Pari', 'Kelurahan Pulau Pari', 'KEL-02', 'Kelurahan Pulau Pari', '6281311554433', 'lurah.pari@seribu.jakarta.go.id', true, true],
-      ['ULS-003', 'Sidik Riyanto, S.AP', 'Lurah Pulau Untung Jawa', 'Kelurahan Pulau Untung Jawa', 'KEL-03', 'Kelurahan Pulau Untung Jawa', '6281988223311', 'lurah.untungjawa@seribu.jakarta.go.id', true, true],
-      ['ULS-004', 'Drs. H. Ismail Mustofa, M.Si', 'Camat Kepulauan Seribu Selatan', 'Kecamatan Kepulauan Seribu Selatan', 'ALL', 'Kecamatan Kepulauan Seribu Selatan', '6281177665544', 'camat.seribuselatan@seribu.jakarta.go.id', true, true],
-      ['ULS-005', 'Hj. Endang Rahmawati', 'Ketua TP PKK Kecamatan', 'TP PKK Kepulauan Seribu Selatan', 'ALL', 'Semua Kelurahan', '6281299332211', 'pkk.seribuselatan@gmail.com', true, true],
-      ['ULS-006', 'Ibu Hj. Marlina', 'Ketua TP PKK Kelurahan', 'TP PKK Kelurahan Pulau Tidung', 'KEL-01', 'Kelurahan Pulau Tidung', '6281344556677', 'pkk.tidung@gmail.com', true, true],
-      ['ULS-007', 'Nurul Hidayati, S.Gz, RD', 'Koordinator Tenaga Gizi', 'Puskesmas Kepulauan Seribu Selatan', 'ALL', 'Puskesmas Kecamatan', '6281311223344', 'nutrisionis.selatan@seribu.jakarta.go.id', true, true],
-      ['ULS-008', 'dr. Farah Anggraini, M.K.M.', 'Kepala Puskesmas', 'Puskesmas Kepulauan Seribu Selatan', 'ALL', 'Puskesmas Kecamatan', '6281188223344', 'kapus.seribuselatan@dinkes.jakarta.go.id', true, true],
-      ['ULS-009', 'Ahmad Syafi\'i, S.IP', 'Kasi Kesejahteraan Rakyat', 'Kelurahan Pulau Tidung', 'KEL-01', 'Kelurahan Pulau Tidung', '6281900112233', 'kesra.tidung@seribu.jakarta.go.id', true, true],
-      ['ULS-010', 'Bdn. Siti Rohmah, S.Tr.Keb', 'Bidan Penanggung Jawab Pustu', 'Puskesmas Pembantu Pulau Untung Jawa', 'KEL-03', 'Kelurahan Pulau Untung Jawa', '6281288776655', 'pustu.untungjawa@seribuselatan.jakarta.go.id', true, true],
-      ['ULS-011', 'dr. Dimas Surya Nugraha', 'Dokter PJ Pustu Pari', 'Puskesmas Pembantu Pulau Pari', 'KEL-02', 'Kelurahan Pulau Pari', '6285711223355', 'dokter.pari@seribuselatan.jakarta.go.id', true, true],
-      ['ULS-012', 'Satpol PP & Dinsos Kecamatan', 'Satuan Tugas Lapangan / Bansos', 'Kecamatan Kepulauan Seribu Selatan', 'ALL', 'Semua Kelurahan', '6281277665544', 'satpol.seribuselatan@jakarta.go.id', true, true]
-    ];
-    for (var ls = 0; ls < defaultLs.length; ls++) {
-      lsUserSheet.appendRow(defaultLs[ls]);
-    }
-  }
-
-  // 6. USERS SISTEM
-  var userSheet = ss.getSheetByName(SHEETS.USERS);
-  if (userSheet && userSheet.getLastRow() <= 1) {
-    var defaultUsers = [
-      ['USR-001', 'admin.gizi@seribuselatan.jakarta.go.id', 'Hafiz Pratama, S.Kom', '6281299887711', 'ADMIN', 'Sistem Informasi & Tata Usaha', 'ALL', true, '01/01/2026', '01/01/2026'],
-      ['USR-002', 'kapus.seribuselatan@dinkes.jakarta.go.id', 'dr. Farah Anggraini, M.K.M.', '6281188223344', 'KEPALA_PUSKESMAS', 'Pimpinan Puskesmas Kepulauan Seribu Selatan', 'ALL', true, '01/01/2026', '01/01/2026'],
-      ['USR-003', 'nutrisionis.selatan@seribuselatan.jakarta.go.id', 'Nurul Hidayati, S.Gz, RD', '6281311223344', 'TENAGA_GIZI', 'Poli Gizi Puskesmas Kepulauan Seribu Selatan', 'PULAU-01', true, '05/01/2026', '15/01/2026'],
-      ['USR-004', 'dokter.pari@seribuselatan.jakarta.go.id', 'dr. Dimas Surya Nugraha', '6285711223355', 'DOKTER_BIDAN_PERAWAT', 'Puskesmas Pembantu Pulau Pari', 'PULAU-02', true, '08/01/2026', '10/01/2026'],
-      ['USR-005', 'pustu.untungjawa@seribuselatan.jakarta.go.id', 'Bdn. Siti Rohmah, S.Tr.Keb', '6281288776655', 'PETUGAS_PUSTU', 'Puskesmas Pembantu Pulau Untung Jawa', 'PULAU-04', true, '10/01/2026', '12/01/2026'],
-      ['USR-006', 'kader.lancang@posyandu.org', 'Ibu Maryanah (Kader Melati)', '6287811998877', 'KADER', 'Posyandu Melati Pulau Lancang', 'PULAU-03', true, '12/01/2026', '12/01/2026'],
-      ['USR-007', 'kesra.tidung@kelurahan.jakarta.go.id', 'Ahmad Syafi\'i, S.IP (Kasi Kesra)', '6281900112233', 'LINTAS_SEKTOR', 'Seksi Kesra Kelurahan Pulau Tidung', 'PULAU-01', true, '15/01/2026', '15/01/2026']
-    ];
-    for (var u = 0; u < defaultUsers.length; u++) {
-      userSheet.appendRow(defaultUsers[u]);
-    }
-  }
+  return {
+    success: true,
+    message: 'Semua data baris berhasil dibersihkan. Hanya header yang tersisa.',
+    totalRowsCleared: totalRowsCleared,
+    clearedSheets: clearedSheets
+  };
 }
 
 // =========================================================================================
-// 2. WHATSAPP API & NOTIFIKASI OTOMATIS
+// 3. WHATSAPP API & NOTIFIKASI OTOMATIS
 // =========================================================================================
 
+/**
+ * Normalisasi nomor HP Indonesia ke format standar internasional (628...)
+ */
 function normalizePhoneNumber(phone) {
   if (!phone) return '';
   var cleaned = String(phone).replace(/\D/g, '');
+
   if (cleaned.indexOf('08') === 0) {
     cleaned = '62' + cleaned.substring(1);
   } else if (cleaned.indexOf('8') === 0) {
@@ -322,14 +309,20 @@ function normalizePhoneNumber(phone) {
   return cleaned;
 }
 
+/**
+ * Membaca nilai konfigurasi dari Sheet KONFIGURASI
+ */
 function getConfigValue(key, defaultValue) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var sheet = ss.getSheetByName(SHEETS.KONFIGURASI);
     if (!sheet) return defaultValue;
 
-    var data = sheet.getDataRange().getValues();
-    for (var i = 1; i < data.length; i++) {
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return defaultValue;
+
+    var data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+    for (var i = 0; i < data.length; i++) {
       if (String(data[i][0]).toUpperCase() === String(key).toUpperCase()) {
         return data[i][1] || defaultValue;
       }
@@ -340,6 +333,9 @@ function getConfigValue(key, defaultValue) {
   return defaultValue;
 }
 
+/**
+ * Mengirim pesan WhatsApp ke nomor tujuan
+ */
 function sendWhatsAppMessage(targetNumber, messageText, customToken) {
   var cleanPhone = normalizePhoneNumber(targetNumber);
   if (!cleanPhone || cleanPhone.length < 9) {
@@ -352,9 +348,10 @@ function sendWhatsAppMessage(targetNumber, messageText, customToken) {
 
   Logger.log('Mengirim WhatsApp ke ' + cleanPhone + ' via provider: ' + provider);
 
-  if (!token || token === 'YOUR_FONNTE_TOKEN_HERE' || token === 'masukkan_token_fonnte_atau_wablas') {
-    var mockMsg = 'Mode Simulasi: Token WA API belum diatur pada sheet KONFIGURASI. Pesan ke ' + cleanPhone + ' berhasil dicatat.';
-    logInternalActivity('SYSTEM', 'WA_NOTIF', 'WHATSAPP', cleanPhone, 'Simulasi WA: ' + messageText.substring(0, 80) + '...', 'SUCCESS');
+  // Jika token belum diisi di sheet KONFIGURASI
+  if (!token || token.trim() === '') {
+    var mockMsg = 'Simulasi Log: Token WA API belum diisi di Sheet KONFIGURASI baris WA_API_TOKEN. Pesan dicatat ke sistem.';
+    logInternalActivity('SYSTEM', 'WA_SIMULASI', 'WHATSAPP', cleanPhone, 'Tujuan: ' + cleanPhone + ' | Pesan: ' + messageText.substring(0, 80) + '...', 'SUCCESS');
     return {
       success: true,
       simulated: true,
@@ -376,7 +373,9 @@ function sendWhatsAppMessage(targetNumber, messageText, customToken) {
       };
       var options = {
         method: 'post',
-        headers: { 'Authorization': token },
+        headers: {
+          'Authorization': token
+        },
         payload: payload,
         muteHttpExceptions: true
       };
@@ -391,7 +390,9 @@ function sendWhatsAppMessage(targetNumber, messageText, customToken) {
       };
       var wablasOptions = {
         method: 'post',
-        headers: { 'Authorization': token },
+        headers: {
+          'Authorization': token
+        },
         payload: wablasPayload,
         muteHttpExceptions: true
       };
@@ -416,43 +417,39 @@ function sendWhatsAppMessage(targetNumber, messageText, customToken) {
       resCode = response.getResponseCode();
       resText = response.getContentText();
     } else {
-      var fallbackPayload = {
-        target: cleanPhone,
-        message: messageText,
-        countryCode: '62'
-      };
-      var fallbackOptions = {
-        method: 'post',
-        headers: { 'Authorization': token },
-        payload: fallbackPayload,
-        muteHttpExceptions: true
-      };
-      response = UrlFetchApp.fetch('https://api.fonnte.com/send', fallbackOptions);
-      resCode = response.getResponseCode();
-      resText = response.getContentText();
+      return { success: false, message: 'Provider WhatsApp tidak dikenali: ' + provider };
     }
 
-    var isSuccess = (resCode >= 200 && resCode < 300);
-    logInternalActivity('SYSTEM', 'WA_NOTIF', 'WHATSAPP', cleanPhone, 'Kirim WA (' + provider + ' - ' + resCode + ') ke ' + cleanPhone, isSuccess ? 'SUCCESS' : 'FAILED');
+    var isOk = (resCode >= 200 && resCode < 300);
+    logInternalActivity('SYSTEM', 'SEND_WA', 'WHATSAPP', cleanPhone, 'Status HTTP: ' + resCode, isOk ? 'SUCCESS' : 'FAILED');
 
     return {
-      success: isSuccess,
+      success: isOk,
       statusCode: resCode,
-      message: isSuccess ? 'Pesan WhatsApp berhasil dikirim ke ' + cleanPhone : 'Gagal mengirim pesan (Kode HTTP ' + resCode + ')',
-      response: resText
+      message: isOk ? 'Pesan WhatsApp berhasil dikirim ke ' + cleanPhone : 'Gagal mengirim WhatsApp (HTTP ' + resCode + ')',
+      rawResponse: resText,
+      phone: cleanPhone
     };
 
   } catch (err) {
-    Logger.log('Kesalahan pengiriman WhatsApp: ' + err.message);
-    logInternalActivity('SYSTEM', 'WA_NOTIF', 'WHATSAPP', cleanPhone, 'Error WA: ' + err.message, 'FAILED');
+    Logger.log('Exception pengiriman WhatsApp: ' + err.message);
+    logInternalActivity('SYSTEM', 'ERROR_WA', 'WHATSAPP', cleanPhone, err.message, 'FAILED');
     return {
       success: false,
-      message: 'Gagal mengirim pesan WhatsApp: ' + err.message
+      message: 'Kesalahan jaringan/API WhatsApp: ' + err.message,
+      phone: cleanPhone
     };
   }
 }
 
+/**
+ * Mengirim pesan massal (broadcast) ke beberapa nomor
+ */
 function sendBroadcastWhatsApp(phoneArray, messageText) {
+  if (!phoneArray || phoneArray.length === 0) {
+    return { total: 0, successCount: 0, failCount: 0, results: [] };
+  }
+
   var results = [];
   var successCount = 0;
   var failCount = 0;
@@ -466,7 +463,7 @@ function sendBroadcastWhatsApp(phoneArray, messageText) {
       failCount++;
     }
     results.push({ phone: phone, result: res });
-    Utilities.sleep(300);
+    Utilities.sleep(250); // Mencegah pemblokiran rate limit
   }
 
   return {
@@ -477,37 +474,29 @@ function sendBroadcastWhatsApp(phoneArray, messageText) {
   };
 }
 
+/**
+ * Notifikasi Otomatis ke Lintas Sektor saat kader lapor balita gizi kurang
+ * Mengambil kontak penerima LANGSUNG dari sheet MASTER_LINTAS_SEKTOR di spreadsheet
+ */
 function broadcastGiziAlertToLintasSektor(laporanData, balitaKurangGiziList) {
   if (!balitaKurangGiziList || balitaKurangGiziList.length === 0) {
-    return { success: true, count: 0, message: 'Tidak ada kasus gizi bermasalah yang perlu dinotifikasikan.' };
+    return { success: true, count: 0, message: 'Tidak ada kasus gizi yang dilaporkan.' };
   }
 
   var autoNotif = String(getConfigValue('WA_NOTIF_AUTO_SEND', 'TRUE')).toUpperCase();
   if (autoNotif !== 'TRUE') {
-    return { success: false, message: 'Fitur WA_NOTIF_AUTO_SEND dinonaktifkan di Sheet KONFIGURASI.' };
+    return { success: false, message: 'Fitur WA_NOTIF_AUTO_SEND dinonaktifkan di sheet KONFIGURASI.' };
   }
 
+  // Ambil penerima langsung dari sheet MASTER_LINTAS_SEKTOR yang ada di Spreadsheet
   var lsList = getTableData(SHEETS.MASTER_LINTAS_SEKTOR);
   var targetKelurahanId = laporanData.kelurahan_id || 'ALL';
 
   var recipients = lsList.filter(function(u) {
     var isWaActive = (u.status_notifikasi_wa === true || String(u.status_notifikasi_wa).toUpperCase() === 'TRUE');
-    var isWilayahMatch = (u.kelurahan_id === 'ALL' || u.kelurahan_id === targetKelurahanId);
+    var isWilayahMatch = (!u.kelurahan_id || u.kelurahan_id === 'ALL' || u.kelurahan_id === targetKelurahanId);
     return isWaActive && isWilayahMatch && u.no_wa;
   });
-
-  if (recipients.length === 0) {
-    return { success: true, count: 0, message: 'Tidak ditemukan kontak lintas sektor aktif untuk kelurahan ini.' };
-  }
-
-  var balitaText = '';
-  for (var i = 0; i < balitaKurangGiziList.length; i++) {
-    var b = balitaKurangGiziList[i];
-    balitaText += (i + 1) + '. *' + (b.nama_balita || b.inisial || 'Balita') + '* (' + (b.jenis_kelamin || '-') + ', ' + (b.usia_bulan || '-') + ' bln)\n' +
-                  '   • BB: ' + (b.berat_badan || '-') + ' kg | TB: ' + (b.tinggi_badan || '-') + ' cm\n' +
-                  '   • Masalah Gizi: *' + (b.status_gizi || b.kategori_masalah || 'Gizi Kurang') + '*\n' +
-                  '   • Rencana Tindak Lanjut: ' + (b.rencana_tindak_lanjut || 'Pendampingan PMT & kunjungan terpadu') + '\n\n';
-  }
 
   var phones = recipients.map(function(r) { return r.no_wa; });
   var adminPhone = getConfigValue('WA_ADMIN_PHONE', '');
@@ -515,17 +504,30 @@ function broadcastGiziAlertToLintasSektor(laporanData, balitaKurangGiziList) {
     phones.push(adminPhone);
   }
 
-  var pesan = '🚨 *PERINGATAN DINI KASUS GIZI BALITA - DERMAGA GIZI*\n' +
-              '*PUSKESMAS KEPULAUAN SERIBU SELATAN*\n\n' +
-              'Pemberitahuan kepada Seluruh Pemangku Kepentingan Lintas Sektor:\n\n' +
+  if (phones.length === 0) {
+    return { success: true, count: 0, message: 'Belum ada kontak lintas sektor aktif yang terdaftar di sheet MASTER_LINTAS_SEKTOR.' };
+  }
+
+  var balitaText = '';
+  for (var i = 0; i < balitaKurangGiziList.length; i++) {
+    var b = balitaKurangGiziList[i];
+    balitaText += (i + 1) + '. *' + (b.nama_balita || b.inisial || 'Balita') + '* (' + (b.jenis_kelamin || '-') + ', ' + (b.usia_bulan || '-') + ' bln)\n' +
+                  '   • BB: ' + (b.berat_badan || '-') + ' kg | TB: ' + (b.tinggi_badan || '-') + ' cm\n' +
+                  '   • Status: *' + (b.status_gizi || b.kategori_masalah || 'Gizi Kurang') + '*\n' +
+                  '   • Rencana Tindak Lanjut: ' + (b.rencana_tindak_lanjut || 'PMT Pemulihan & Kunjungan Rumah') + '\n\n';
+  }
+
+  var pesan = '🚨 *NOTIFIKASI DERMAGA GIZI - PUSKESMAS KEPULAUAN SERIBU SELATAN*\n\n' +
+              'Pemberitahuan Temuan Balita Bermasalah Gizi:\n\n' +
               '📍 *Posyandu*: ' + (laporanData.posyandu_nama || '-') + '\n' +
               '🏛️ *Kelurahan*: ' + (laporanData.kelurahan_nama || '-') + '\n' +
-              '📅 *Tanggal Kegiatan*: ' + (laporanData.tanggal_pelaksanaan || Utilities.formatDate(new Date(), 'Asia/Jakarta', 'dd/MM/yyyy')) + '\n' +
-              '📊 *Hasil Penimbangan*: ' + (laporanData.total_ditimbang || 0) + ' hadir dari ' + (laporanData.total_sasaran || 0) + ' sasaran\n\n' +
-              '⚠️ *TEMUAN BALITA MEMBUTUHKAN INTERVENSI LINTAS SEKTOR*:\n\n' +
+              '📅 *Tanggal*: ' + (laporanData.tanggal_pelaksanaan || Utilities.formatDate(new Date(), 'Asia/Jakarta', 'dd/MM/yyyy')) + '\n' +
+              '📊 *Cakupan Timbang*: ' + (laporanData.total_ditimbang || 0) + ' hadir dari ' + (laporanData.total_sasaran || 0) + ' sasaran\n\n' +
+              '⚠️ *DAFTAR BALITA MEMERLUKAN INTERVENSI LINTAS SEKTOR*:\n\n' +
               balitaText +
-              'Mohon sinergi dan kolaborasi dari Lurah, Satpol PP, TP-PKK, TPK Stunting, Puskesmas, dan seluruh unit untuk segera menindaklanjuti.\n\n' +
-              '_Sistem Terpadu DERMAGA GIZI - Puskesmas Kepulauan Seribu Selatan_';
+              'Diharapkan sinergi dari Lurah, Satpol PP, TP-PKK, TPK Stunting, dan Puskesmas untuk segera berkoordinasi dan melakukan tindak lanjut terpadu.\n\n' +
+              '🔗 *Buka Aplikasi:* ' + getConfigValue('APP_URL', 'https://dermagagizi.puskesmasseribuselatan.com') + '\n\n' +
+              '_Aplikasi DERMAGA GIZI - Puskesmas Kepulauan Seribu Selatan_';
 
   var broadcastResult = sendBroadcastWhatsApp(phones, pesan);
   return {
@@ -536,7 +538,7 @@ function broadcastGiziAlertToLintasSektor(laporanData, balitaKurangGiziList) {
 }
 
 // =========================================================================================
-// 3. HANDLER HTTP GET & POST (Web App API Endpoint)
+// 4. HANDLER HTTP GET & POST (Web App API Endpoint)
 // =========================================================================================
 
 function doGet(e) {
@@ -544,31 +546,40 @@ function doGet(e) {
     var params = e ? e.parameter : {};
     var action = params.action || 'ping';
 
+    // Ping status koneksi
     if (action === 'ping') {
-      return jsonResponse(true, 'Koneksi ke backend Google Apps Script aktif dan responsif.', {
+      return jsonResponse(true, 'Koneksi ke Google Apps Script aktif dan responsif.', {
         app: 'DERMAGA GIZI',
         instansi: 'Puskesmas Kepulauan Seribu Selatan',
-        version: '2.0.0',
+        version: '2.1.0 (Clean Database Mode)',
         timestamp: new Date().toISOString()
       });
     }
 
+    // Setup sheet database bersih
     if (action === 'init' || action === 'setup' || action === 'setupDatabase') {
       var setupResult = setupDatabase();
       return jsonResponse(setupResult.success, setupResult.message, setupResult.data);
     }
 
+    // Pembersihan semua data baris (hanya sisakan header)
+    if (action === 'clearAllData' || action === 'clearData') {
+      var clearResult = clearAllDataRows();
+      return jsonResponse(clearResult.success, clearResult.message, clearResult);
+    }
+
+    // Tes pengiriman WhatsApp
     if (action === 'testWA') {
-      var testPhone = params.phone || getConfigValue('WA_ADMIN_PHONE', '6281299887711');
+      var testPhone = params.phone || getConfigValue('WA_ADMIN_PHONE', '');
       var testMsg = '🔔 *TES KONEKSI WHATSAPP API - DERMAGA GIZI*\n' +
                     'Puskesmas Kepulauan Seribu Selatan\n\n' +
-                    'Halo, koneksi WhatsApp Gateway berhasil aktif pada ' + 
-                    Utilities.formatDate(new Date(), 'Asia/Jakarta', 'dd/MM/yyyy HH:mm:ss') + ' WIB.\n' +
-                    'Sistem siap mengirimkan notifikasi otomatis ke lintas sektor!';
+                    'Halo, koneksi WhatsApp Gateway aktif pada ' + 
+                    Utilities.formatDate(new Date(), 'Asia/Jakarta', 'dd/MM/yyyy HH:mm:ss') + ' WIB.';
       var waResult = sendWhatsAppMessage(testPhone, testMsg);
       return jsonResponse(waResult.success, waResult.message, waResult);
     }
 
+    // Ambil seluruh data langsung dari spreadsheet (Fokus Database Sheet Murni)
     if (action === 'getAllData') {
       var allData = {
         pulau: getTableData(SHEETS.PULAU),
@@ -585,9 +596,10 @@ function doGet(e) {
         konfigurasi: getTableData(SHEETS.KONFIGURASI),
         timestamp: new Date().toISOString()
       };
-      return jsonResponse(true, 'Data terpadu Google Spreadsheet berhasil disinkronkan', allData);
+      return jsonResponse(true, 'Data dari Google Spreadsheet berhasil dimuat.', allData);
     }
 
+    // Endpoint individual per tabel
     if (action === 'getPulau') return jsonResponse(true, 'Data pulau', getTableData(SHEETS.PULAU));
     if (action === 'getKelurahan') return jsonResponse(true, 'Data kelurahan', getTableData(SHEETS.MASTER_KELURAHAN));
     if (action === 'getPosyandu') return jsonResponse(true, 'Data posyandu', getTableData(SHEETS.MASTER_POSYANDU));
@@ -598,12 +610,12 @@ function doGet(e) {
     if (action === 'getTindakLanjut') return jsonResponse(true, 'Data tindak lanjut', getTableData(SHEETS.TINDAK_LANJUT));
     if (action === 'getKendala') return jsonResponse(true, 'Data kendala', getTableData(SHEETS.KENDALA));
     if (action === 'getLintasSektor') return jsonResponse(true, 'Data lintas sektor', getTableData(SHEETS.LINTAS_SEKTOR));
-    if (action === 'getLogs') return jsonResponse(true, 'Data riwayat audit', getTableData(SHEETS.RIWAYAT_AKTIVITAS));
+    if (action === 'getLogs') return jsonResponse(true, 'Data riwayat aktivitas', getTableData(SHEETS.RIWAYAT_AKTIVITAS));
     if (action === 'getConfig') return jsonResponse(true, 'Data konfigurasi', getTableData(SHEETS.KONFIGURASI));
 
     return jsonResponse(false, 'Aksi GET tidak dikenali: ' + action, null);
   } catch (err) {
-    return jsonResponse(false, 'Terjadi kesalahan sistem backend GET: ' + err.message, null);
+    return jsonResponse(false, 'Terjadi kesalahan sistem GET: ' + err.message, null);
   }
 }
 
@@ -625,11 +637,19 @@ function doPost(e) {
     var data = postData.data || {};
     var currentUser = postData.user || { user_id: 'SYSTEM', nama: 'Petugas Sistem' };
 
+    // Setup Database
     if (action === 'setupDatabase' || action === 'init') {
       var setupRes = setupDatabase();
       return jsonResponse(setupRes.success, setupRes.message, setupRes.data);
     }
 
+    // Bersihkan Semua Data Demo
+    if (action === 'clearAllData' || action === 'clearData') {
+      var clearRes = clearAllDataRows();
+      return jsonResponse(clearRes.success, clearRes.message, clearRes);
+    }
+
+    // Kirim WhatsApp
     if (action === 'sendWhatsApp') {
       var target = data.target || data.phone || data.no_wa;
       var message = data.message || data.pesan;
@@ -637,6 +657,7 @@ function doPost(e) {
       return jsonResponse(waRes.success, waRes.message, waRes);
     }
 
+    // Simpan Laporan Posyandu & Otomatis Notifikasi Lintas Sektor
     if (action === 'createLaporanPosyandu' || action === 'saveLaporanPosyandu') {
       var createdLaporan = handleCreateRecord(SHEETS.LAPORAN_POSYANDU, HEADERS.LAPORAN_POSYANDU, data, 'LAPORAN_POSYANDU', currentUser);
       var balitaList = data.daftar_balita_kurang_gizi || [];
@@ -644,55 +665,49 @@ function doPost(e) {
       if (balitaList.length > 0) {
         notifReport = broadcastGiziAlertToLintasSektor(data, balitaList);
       }
-
-      return jsonResponse(true, 'Laporan Posyandu berhasil disimpan.', {
+      return jsonResponse(true, 'Laporan Posyandu berhasil disimpan ke spreadsheet.', {
         laporan: data,
         whatsapp_broadcast: notifReport
       });
     }
 
-    if (action === 'createSasaran') {
-      return handleCreateRecord(SHEETS.SASARAN, HEADERS.SASARAN, data, 'SASARAN', currentUser);
-    }
-    if (action === 'updateSasaran') {
-      return handleUpdateRecord(SHEETS.SASARAN, 'sasaran_id', data.sasaran_id, data, 'SASARAN', currentUser);
-    }
+    // CRUD Sasaran Balita
+    if (action === 'createSasaran') return handleCreateRecord(SHEETS.SASARAN, HEADERS.SASARAN, data, 'SASARAN', currentUser);
+    if (action === 'updateSasaran') return handleUpdateRecord(SHEETS.SASARAN, 'sasaran_id', data.sasaran_id, data, 'SASARAN', currentUser);
+    if (action === 'deleteSasaran') return handleDeleteRecord(SHEETS.SASARAN, 'sasaran_id', data.sasaran_id, 'SASARAN', currentUser);
 
-    if (action === 'createTindakLanjut') {
-      return handleCreateRecord(SHEETS.TINDAK_LANJUT, HEADERS.TINDAK_LANJUT, data, 'TINDAK_LANJUT', currentUser);
-    }
-    if (action === 'updateTindakLanjut') {
-      return handleUpdateRecord(SHEETS.TINDAK_LANJUT, 'tindak_lanjut_id', data.tindak_lanjut_id, data, 'TINDAK_LANJUT', currentUser);
-    }
+    // CRUD Tindak Lanjut
+    if (action === 'createTindakLanjut') return handleCreateRecord(SHEETS.TINDAK_LANJUT, HEADERS.TINDAK_LANJUT, data, 'TINDAK_LANJUT', currentUser);
+    if (action === 'updateTindakLanjut') return handleUpdateRecord(SHEETS.TINDAK_LANJUT, 'tindak_lanjut_id', data.tindak_lanjut_id, data, 'TINDAK_LANJUT', currentUser);
+    if (action === 'deleteTindakLanjut') return handleDeleteRecord(SHEETS.TINDAK_LANJUT, 'tindak_lanjut_id', data.tindak_lanjut_id, 'TINDAK_LANJUT', currentUser);
 
-    if (action === 'createPosyandu') {
-      return handleCreateRecord(SHEETS.MASTER_POSYANDU, HEADERS.MASTER_POSYANDU, data, 'POSYANDU', currentUser);
-    }
-    if (action === 'updatePosyandu') {
-      return handleUpdateRecord(SHEETS.MASTER_POSYANDU, 'posyandu_id', data.posyandu_id, data, 'POSYANDU', currentUser);
-    }
+    // CRUD Master Posyandu
+    if (action === 'createPosyandu') return handleCreateRecord(SHEETS.MASTER_POSYANDU, HEADERS.MASTER_POSYANDU, data, 'POSYANDU', currentUser);
+    if (action === 'updatePosyandu') return handleUpdateRecord(SHEETS.MASTER_POSYANDU, 'posyandu_id', data.posyandu_id, data, 'POSYANDU', currentUser);
+    if (action === 'deletePosyandu') return handleDeleteRecord(SHEETS.MASTER_POSYANDU, 'posyandu_id', data.posyandu_id, 'POSYANDU', currentUser);
 
-    if (action === 'createUserLintasSektor') {
-      return handleCreateRecord(SHEETS.MASTER_LINTAS_SEKTOR, HEADERS.MASTER_LINTAS_SEKTOR, data, 'USER_LINTAS_SEKTOR', currentUser);
-    }
-    if (action === 'updateUserLintasSektor') {
-      return handleUpdateRecord(SHEETS.MASTER_LINTAS_SEKTOR, 'user_id', data.user_id, data, 'USER_LINTAS_SEKTOR', currentUser);
-    }
+    // CRUD Master Kelurahan
+    if (action === 'createKelurahan') return handleCreateRecord(SHEETS.MASTER_KELURAHAN, HEADERS.MASTER_KELURAHAN, data, 'KELURAHAN', currentUser);
+    if (action === 'updateKelurahan') return handleUpdateRecord(SHEETS.MASTER_KELURAHAN, 'kelurahan_id', data.kelurahan_id, data, 'KELURAHAN', currentUser);
 
-    if (action === 'createKendala') {
-      return handleCreateRecord(SHEETS.KENDALA, HEADERS.KENDALA, data, 'KENDALA', currentUser);
-    }
-    if (action === 'updateKendala') {
-      return handleUpdateRecord(SHEETS.KENDALA, 'kendala_id', data.kendala_id, data, 'KENDALA', currentUser);
-    }
+    // CRUD Master User Lintas Sektor
+    if (action === 'createUserLintasSektor') return handleCreateRecord(SHEETS.MASTER_LINTAS_SEKTOR, HEADERS.MASTER_LINTAS_SEKTOR, data, 'USER_LINTAS_SEKTOR', currentUser);
+    if (action === 'updateUserLintasSektor') return handleUpdateRecord(SHEETS.MASTER_LINTAS_SEKTOR, 'user_id', data.user_id, data, 'USER_LINTAS_SEKTOR', currentUser);
+    if (action === 'deleteUserLintasSektor') return handleDeleteRecord(SHEETS.MASTER_LINTAS_SEKTOR, 'user_id', data.user_id, 'USER_LINTAS_SEKTOR', currentUser);
 
-    if (action === 'createLintasSektor') {
-      return handleCreateRecord(SHEETS.LINTAS_SEKTOR, HEADERS.LINTAS_SEKTOR, data, 'LINTAS_SEKTOR', currentUser);
-    }
-    if (action === 'updateLintasSektor') {
-      return handleUpdateRecord(SHEETS.LINTAS_SEKTOR, 'kegiatan_id', data.kegiatan_id, data, 'LINTAS_SEKTOR', currentUser);
-    }
+    // CRUD User Sistem
+    if (action === 'createUser') return handleCreateRecord(SHEETS.USERS, HEADERS.USERS, data, 'USER', currentUser);
+    if (action === 'updateUser') return handleUpdateRecord(SHEETS.USERS, 'user_id', data.user_id, data, 'USER', currentUser);
 
+    // CRUD Kendala
+    if (action === 'createKendala') return handleCreateRecord(SHEETS.KENDALA, HEADERS.KENDALA, data, 'KENDALA', currentUser);
+    if (action === 'updateKendala') return handleUpdateRecord(SHEETS.KENDALA, 'kendala_id', data.kendala_id, data, 'KENDALA', currentUser);
+
+    // CRUD Lintas Sektor
+    if (action === 'createLintasSektor') return handleCreateRecord(SHEETS.LINTAS_SEKTOR, HEADERS.LINTAS_SEKTOR, data, 'LINTAS_SEKTOR', currentUser);
+    if (action === 'updateLintasSektor') return handleUpdateRecord(SHEETS.LINTAS_SEKTOR, 'kegiatan_id', data.kegiatan_id, data, 'LINTAS_SEKTOR', currentUser);
+
+    // Simpan Konfigurasi
     if (action === 'saveConfig') {
       var ss = SpreadsheetApp.getActiveSpreadsheet();
       var configSheet = ss.getSheetByName(SHEETS.KONFIGURASI);
@@ -728,6 +743,13 @@ function doPost(e) {
   }
 }
 
+// =========================================================================================
+// 5. FUNGSI PEMBACAAN & PENULISAN DATABASE SPREADSHEET
+// =========================================================================================
+
+/**
+ * Membaca data murni dari baris Google Spreadsheet
+ */
 function getTableData(sheetName) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(sheetName);
@@ -769,7 +791,9 @@ function handleCreateRecord(sheetName, headerCols, dataObj, jenisData, user) {
     var col = headerCols[i];
     var val = dataObj[col] !== undefined ? dataObj[col] : '';
     if (typeof val === 'object' && val !== null) {
-      try { val = JSON.stringify(val); } catch (e) {}
+      try {
+        val = JSON.stringify(val);
+      } catch (e) {}
     }
     if (col === 'created_at' || col === 'updated_at') {
       val = val || Utilities.formatDate(new Date(), 'Asia/Jakarta', 'dd/MM/yyyy HH:mm:ss');
@@ -778,11 +802,10 @@ function handleCreateRecord(sheetName, headerCols, dataObj, jenisData, user) {
   }
 
   sheet.appendRow(row);
-
   var recordId = dataObj[headerCols[0]] || 'NEW_RECORD';
-  logInternalActivity(user ? user.user_id : 'SYSTEM', 'CREATE', jenisData, recordId, 'Pembuatan data baru pada ' + sheetName, 'SUCCESS');
+  logInternalActivity(user ? user.user_id : 'SYSTEM', 'CREATE', jenisData, recordId, 'Tambah data baru pada ' + sheetName, 'SUCCESS');
 
-  return jsonResponse(true, 'Data berhasil disimpan ke ' + sheetName, dataObj);
+  return jsonResponse(true, 'Data berhasil disimpan ke sheet ' + sheetName, dataObj);
 }
 
 function handleUpdateRecord(sheetName, idColName, idValue, dataObj, jenisData, user) {
@@ -818,15 +841,47 @@ function handleUpdateRecord(sheetName, idColName, idValue, dataObj, jenisData, u
     if (dataObj[colName] !== undefined) {
       var cellVal = dataObj[colName];
       if (typeof cellVal === 'object' && cellVal !== null) {
-        try { cellVal = JSON.stringify(cellVal); } catch (e) {}
+        try {
+          cellVal = JSON.stringify(cellVal);
+        } catch (e) {}
       }
       sheet.getRange(targetRow, j + 1).setValue(cellVal);
     }
   }
 
-  logInternalActivity(user ? user.user_id : 'SYSTEM', 'UPDATE', jenisData, idValue, 'Pembaruan data pada ' + sheetName, 'SUCCESS');
-
+  logInternalActivity(user ? user.user_id : 'SYSTEM', 'UPDATE', jenisData, idValue, 'Update data pada ' + sheetName, 'SUCCESS');
   return jsonResponse(true, 'Data berhasil diperbarui di ' + sheetName, dataObj);
+}
+
+function handleDeleteRecord(sheetName, idColName, idValue, jenisData, user) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet) return jsonResponse(false, 'Sheet tidak ditemukan: ' + sheetName, null);
+
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow <= 1) return jsonResponse(false, 'Data kosong di sheet ' + sheetName, null);
+
+  var values = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+  var headers = values[0];
+  var idIndex = headers.indexOf(idColName);
+  if (idIndex === -1) return jsonResponse(false, 'Kolom ID tidak ditemukan: ' + idColName, null);
+
+  var targetRow = -1;
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][idIndex]) === String(idValue)) {
+      targetRow = i + 1;
+      break;
+    }
+  }
+
+  if (targetRow === -1) {
+    return jsonResponse(false, 'Data dengan ' + idColName + ' = ' + idValue + ' tidak ditemukan di ' + sheetName, null);
+  }
+
+  sheet.deleteRow(targetRow);
+  logInternalActivity(user ? user.user_id : 'SYSTEM', 'DELETE', jenisData, idValue, 'Hapus data pada ' + sheetName, 'SUCCESS');
+  return jsonResponse(true, 'Data berhasil dihapus dari ' + sheetName, { id: idValue });
 }
 
 function logInternalActivity(userId, aksi, jenisData, recordId, ringkasan, status) {
@@ -852,22 +907,30 @@ function jsonResponse(success, message, data) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+// =========================================================================================
+// 6. POPUP MENU SPREADSHEET
+// =========================================================================================
+
 function menuTestWhatsApp() {
   var ui = SpreadsheetApp.getUi();
-  var defaultPhone = getConfigValue('WA_ADMIN_PHONE', '6281299887711');
+  var defaultPhone = getConfigValue('WA_ADMIN_PHONE', '');
   var response = ui.prompt(
-    'Tes Pengiriman WhatsApp Gateway',
-    'Masukkan nomor WhatsApp penerima untuk pengetesan (format: 628... atau 08...):',
+    'Tes WhatsApp Gateway',
+    'Masukkan nomor WhatsApp penerima (contoh: 62812... atau 08...):',
     ui.ButtonSet.OK_CANCEL
   );
 
   if (response.getSelectedButton() === ui.Button.OK) {
     var phone = response.getResponseText().trim() || defaultPhone;
-    var testMsg = '🔔 *TES KONEKSI WHATSAPP API - DERMAGA GIZI*\n' +
+    if (!phone) {
+      ui.alert('Peringatan', 'Silakan masukkan nomor telepon penerima.', ui.ButtonSet.OK);
+      return;
+    }
+    var testMsg = '🔔 *TES WHATSAPP GATEWAY - DERMAGA GIZI*\n' +
                   'Puskesmas Kepulauan Seribu Selatan\n\n' +
-                  'Uji coba WhatsApp API berhasil terkirim dari Google Spreadsheet pada ' +
+                  'Koneksi API WhatsApp berhasil aktif pada ' +
                   Utilities.formatDate(new Date(), 'Asia/Jakarta', 'dd/MM/yyyy HH:mm:ss') + ' WIB.\n\n' +
-                  'Sistem siap mengirimkan notifikasi penanganan gizi balita ke lintas sektor!';
+                  'Sistem siap mengirimkan notifikasi penanganan gizi balita ke lintas sektor.';
     var res = sendWhatsAppMessage(phone, testMsg);
     ui.alert(res.success ? 'Berhasil Terkirim!' : 'Gagal Mengirim', res.message, ui.ButtonSet.OK);
   }
@@ -876,33 +939,33 @@ function menuTestWhatsApp() {
 function menuBroadcastTestWhatsApp() {
   var ui = SpreadsheetApp.getUi();
   var confirm = ui.alert(
-    'Konfirmasi Broadcast WhatsApp Lintas Sektor',
-    'Apakah Anda ingin mengirim pesan uji coba ke seluruh kontak lintas sektor yang terdaftar aktif?',
+    'Konfirmasi Broadcast WhatsApp',
+    'Apakah Anda ingin mengirim pesan uji coba ke seluruh kontak lintas sektor yang terdaftar di sheet MASTER_LINTAS_SEKTOR?',
     ui.ButtonSet.YES_NO
   );
 
   if (confirm === ui.Button.YES) {
     var dummyLaporan = {
-      posyandu_nama: 'Posyandu Melati 1 (Uji Coba)',
-      kelurahan_nama: 'Kelurahan Pulau Tidung',
-      kelurahan_id: 'KEL-01',
-      total_ditimbang: 45,
-      total_sasaran: 50,
+      posyandu_nama: 'Posyandu (Uji Coba Sistem)',
+      kelurahan_nama: 'Wilayah Kerja Kepulauan Seribu Selatan',
+      kelurahan_id: 'ALL',
+      total_ditimbang: 0,
+      total_sasaran: 0,
       tanggal_pelaksanaan: Utilities.formatDate(new Date(), 'Asia/Jakarta', 'dd/MM/yyyy')
     };
     var dummyBalita = [
       {
-        nama_balita: 'An. Contoh Uji Coba',
+        nama_balita: 'Uji Coba Sistem WhatsApp',
         jenis_kelamin: 'L',
-        usia_bulan: 18,
-        berat_badan: 8.2,
-        tinggi_badan: 75,
-        status_gizi: 'Stunting (Pendek)',
-        rencana_tindak_lanjut: 'Pemberian PMT Pemulihan dan pendampingan TPK / PKK'
+        usia_bulan: 12,
+        berat_badan: 8.0,
+        tinggi_badan: 74,
+        status_gizi: 'Pemeriksaan Sistem',
+        rencana_tindak_lanjut: 'Uji coba jalur komunikasi otomatis lintas sektor'
       }
     ];
     var res = broadcastGiziAlertToLintasSektor(dummyLaporan, dummyBalita);
-    ui.alert('Hasil Broadcast', 'Pesan notifikasi berhasil diproses untuk ' + (res.recipientsCount || 0) + ' pemangku kepentingan.', ui.ButtonSet.OK);
+    ui.alert('Hasil Broadcast', 'Pesan notifikasi diproses untuk ' + (res.recipientsCount || 0) + ' kontak.', ui.ButtonSet.OK);
   }
 }
 
@@ -918,7 +981,7 @@ function menuCheckStatus() {
     if (sheet) {
       var rows = Math.max(0, sheet.getLastRow() - 1);
       totalRows += rows;
-      summary.push('• ' + name + ': ' + rows + ' data');
+      summary.push('• ' + name + ': ' + rows + ' baris data');
     } else {
       summary.push('• ' + name + ': ❌ Belum dibuat');
     }
@@ -927,7 +990,7 @@ function menuCheckStatus() {
   ui.alert(
     'Status Database DERMAGA GIZI',
     'Total Sheet: ' + ss.getSheets().length + '\n' +
-    'Total Rekord Data: ' + totalRows + '\n\n' +
+    'Total Baris Data Aktif: ' + totalRows + '\n\n' +
     summary.join('\n'),
     ui.ButtonSet.OK
   );
@@ -941,14 +1004,14 @@ function menuShowGuide() {
 
   var msg = 'PANDUAN WHATSAPP GATEWAY DERMAGA GIZI:\n\n' +
             '1. Provider Terpilih: ' + provider + '\n' +
-            '2. Status Token: ' + (token.indexOf('YOUR_') === -1 ? 'Sudah Diatur' : 'Masih Default') + '\n' +
+            '2. Status Token: ' + (token ? 'Sudah Diisi' : 'Belum Diisi (Kosong)') + '\n' +
             '3. Nomor Admin: ' + adminPhone + '\n\n' +
-            'CARA MENDAPATKAN TOKEN FONNTE (GRATIS):\n' +
-            '1. Buka https://fonnte.com dan daftar akun.\n' +
-            '2. Hubungkan nomor WhatsApp Anda dengan scan QR Code di menu Device Fonnte.\n' +
-            '3. Salin API Token yang diberikan.\n' +
-            '4. Buka sheet "KONFIGURASI", tempel token pada baris "WA_API_TOKEN".\n' +
-            '5. Sistem akan langsung aktif mengirim pesan otomatis ke seluruh lintas sektor!';
+            'CARA MENGAKTIFKAN WHATSAPP (FONNTE / WABLAS):\n' +
+            '1. Buka https://fonnte.com dan buat akun gratis.\n' +
+            '2. Hubungkan WhatsApp perangkat Anda via Scan QR.\n' +
+            '3. Salin API Token Fonnte Anda.\n' +
+            '4. Di spreadsheet ini, buka sheet "KONFIGURASI", tempel token pada baris WA_API_TOKEN.\n' +
+            '5. Sistem siap mengirim broadcast otomatis ke seluruh nomor lintas sektor!';
 
-  ui.alert('Panduan Konfigurasi WhatsApp API', msg, ui.ButtonSet.OK);
+  ui.alert('Panduan WhatsApp Gateway', msg, ui.ButtonSet.OK);
 }

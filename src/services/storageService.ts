@@ -58,6 +58,86 @@ class StorageService {
     this.cleanUpOldBokor();
   }
 
+  /**
+   * Penyimpanan aman localStorage yang menangani QuotaExceededError
+   * Secara otomatis membebaskan ruang dan membersihkan foto lama jika kuota browser penuh.
+   */
+  public safeSetItem(key: string, value: string): boolean {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch (err: any) {
+      console.warn(`[StorageService] QuotaExceeded saat setItem key "${key}". Melakukan pembersihan darurat...`, err);
+      // 1. Bersihkan log audit dan riwayat notifikasi berlebih
+      try {
+        localStorage.removeItem(STORAGE_KEYS.LOGS);
+        const rawWa = localStorage.getItem(STORAGE_KEYS.WA_NOTIFS);
+        if (rawWa) {
+          const wa = JSON.parse(rawWa);
+          if (Array.isArray(wa) && wa.length > 5) {
+            localStorage.setItem(STORAGE_KEYS.WA_NOTIFS, JSON.stringify(wa.slice(0, 5)));
+          }
+        }
+      } catch (cleanErr) {
+        // ignore
+      }
+
+      // 2. Coba simpan kembali
+      try {
+        localStorage.setItem(key, value);
+        return true;
+      } catch (err2) {
+        // 3. Jika masih gagal pada TINDAK_LANJUT, pangkas foto-foto lama yang memakan kuota
+        if (key === STORAGE_KEYS.TINDAK_LANJUT) {
+          try {
+            const list: TindakLanjut[] = JSON.parse(value);
+            // Simpan foto hanya dari 2 data terbaru, hapus foto lama yang berat (>80KB)
+            let keptPhotos = 0;
+            const pruned = list.map(item => {
+              const copy = { ...item };
+              if (copy.foto_dokumen) {
+                keptPhotos++;
+                if (keptPhotos > 2 || copy.foto_dokumen.length > 80000) {
+                  copy.foto_dokumen = undefined;
+                }
+              }
+              if (copy.tindak_lanjut_lintas_sektor) {
+                copy.tindak_lanjut_lintas_sektor = copy.tindak_lanjut_lintas_sektor.map(a => {
+                  if (a.foto_dokumen && (keptPhotos > 2 || a.foto_dokumen.length > 80000)) {
+                    return { ...a, foto_dokumen: undefined };
+                  }
+                  return a;
+                });
+              }
+              return copy;
+            });
+            localStorage.setItem(key, JSON.stringify(pruned));
+            return true;
+          } catch (err3) {
+            // 4. Upaya terakhir: buang foto agar catatan data intervensi balita & status tetap tersimpan aman
+            try {
+              const list: TindakLanjut[] = JSON.parse(value);
+              const withoutPhotos = list.map(item => ({
+                ...item,
+                foto_dokumen: undefined,
+                tindak_lanjut_lintas_sektor: item.tindak_lanjut_lintas_sektor?.map(a => ({
+                  ...a,
+                  foto_dokumen: undefined
+                }))
+              }));
+              localStorage.setItem(key, JSON.stringify(withoutPhotos));
+              return true;
+            } catch (errFinal) {
+              console.error('[StorageService] Gagal total menyimpan ke localStorage', errFinal);
+              return false;
+            }
+          }
+        }
+        return false;
+      }
+    }
+  }
+
   private cleanUpOldBokor() {
     try {
       const rawP = localStorage.getItem(STORAGE_KEYS.PULAU);
@@ -98,6 +178,15 @@ class StorageService {
           }
           return u;
         });
+
+        // Pastikan seluruh akun baru (Dishub, TP PKK, Satpol PP, Dinsos) masuk
+        INITIAL_USERS.forEach(iu => {
+          if (!merged.some(u => u.user_id === iu.user_id)) {
+            merged.push(iu);
+            updated = true;
+          }
+        });
+
         if (updated) {
           localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(merged));
         }
@@ -107,45 +196,54 @@ class StorageService {
     }
   }
 
+  public getSafeArray<T>(key: string, fallback: T[]): T[] {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw || raw === 'null' || raw === 'undefined' || raw === '[]') {
+        localStorage.setItem(key, JSON.stringify(fallback));
+        return [...fallback];
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        localStorage.setItem(key, JSON.stringify(fallback));
+        return [...fallback];
+      }
+      return parsed;
+    } catch (e) {
+      localStorage.setItem(key, JSON.stringify(fallback));
+      return [...fallback];
+    }
+  }
+
   private initIfEmpty() {
-    if (!localStorage.getItem(STORAGE_KEYS.PULAU)) {
-      localStorage.setItem(STORAGE_KEYS.PULAU, JSON.stringify(INITIAL_PULAU));
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
-      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.SASARAN)) {
-      localStorage.setItem(STORAGE_KEYS.SASARAN, JSON.stringify(INITIAL_SASARAN));
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.TINDAK_LANJUT)) {
-      localStorage.setItem(STORAGE_KEYS.TINDAK_LANJUT, JSON.stringify(INITIAL_TINDAK_LANJUT));
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.KENDALA)) {
-      localStorage.setItem(STORAGE_KEYS.KENDALA, JSON.stringify(INITIAL_KENDALA));
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.LINTAS_SEKTOR)) {
-      localStorage.setItem(STORAGE_KEYS.LINTAS_SEKTOR, JSON.stringify(INITIAL_LINTAS_SEKTOR));
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.LOGS)) {
-      localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(INITIAL_LOGS));
-    }
+    const checkAndInit = (key: string, data: any) => {
+      try {
+        const val = localStorage.getItem(key);
+        if (!val || val === 'null' || val === 'undefined' || val === '[]') {
+          localStorage.setItem(key, JSON.stringify(data));
+        }
+      } catch (e) {
+        localStorage.setItem(key, JSON.stringify(data));
+      }
+    };
+
+    checkAndInit(STORAGE_KEYS.PULAU, INITIAL_PULAU);
+    checkAndInit(STORAGE_KEYS.USERS, INITIAL_USERS);
+    checkAndInit(STORAGE_KEYS.SASARAN, INITIAL_SASARAN);
+    checkAndInit(STORAGE_KEYS.TINDAK_LANJUT, INITIAL_TINDAK_LANJUT);
+    checkAndInit(STORAGE_KEYS.KENDALA, INITIAL_KENDALA);
+    checkAndInit(STORAGE_KEYS.LINTAS_SEKTOR, INITIAL_LINTAS_SEKTOR);
+    checkAndInit(STORAGE_KEYS.LOGS, INITIAL_LOGS);
+    checkAndInit(STORAGE_KEYS.KELURAHAN, INITIAL_KELURAHAN);
+    checkAndInit(STORAGE_KEYS.POSYANDU, INITIAL_POSYANDU);
+    checkAndInit(STORAGE_KEYS.USER_LINTAS_SEKTOR, INITIAL_USER_LINTAS_SEKTOR);
+    checkAndInit(STORAGE_KEYS.LAPORAN_POSYANDU, INITIAL_LAPORAN_POSYANDU);
+    
     if (!localStorage.getItem(STORAGE_KEYS.WA_NOTIFS)) {
       localStorage.setItem(STORAGE_KEYS.WA_NOTIFS, JSON.stringify([]));
     }
     if (!localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID)) {
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, 'USR-001'); // Default Admin
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.KELURAHAN)) {
-      localStorage.setItem(STORAGE_KEYS.KELURAHAN, JSON.stringify(INITIAL_KELURAHAN));
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.POSYANDU)) {
-      localStorage.setItem(STORAGE_KEYS.POSYANDU, JSON.stringify(INITIAL_POSYANDU));
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.USER_LINTAS_SEKTOR)) {
-      localStorage.setItem(STORAGE_KEYS.USER_LINTAS_SEKTOR, JSON.stringify(INITIAL_USER_LINTAS_SEKTOR));
-    }
-    if (!localStorage.getItem(STORAGE_KEYS.LAPORAN_POSYANDU)) {
-      localStorage.setItem(STORAGE_KEYS.LAPORAN_POSYANDU, JSON.stringify(INITIAL_LAPORAN_POSYANDU));
     }
   }
 
@@ -175,14 +273,13 @@ class StorageService {
 
   // --- Users & RBAC ---
   public getUsers(): User[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.USERS);
-    return raw ? JSON.parse(raw) : INITIAL_USERS;
+    return this.getSafeArray<User>(STORAGE_KEYS.USERS, INITIAL_USERS);
   }
 
   public getCurrentUser(): User {
     const currentId = localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID) || 'USR-001';
     const users = this.getUsers();
-    return users.find(u => u.user_id === currentId) || users[0];
+    return users.find(u => u && u.user_id === currentId) || users[0] || INITIAL_USERS[0];
   }
 
   public setCurrentUser(userId: string) {
@@ -202,9 +299,8 @@ class StorageService {
 
   // --- Pulau ---
   public getPulauList(): Pulau[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.PULAU);
-    const list: Pulau[] = raw ? JSON.parse(raw) : INITIAL_PULAU;
-    return list.filter(p => p.pulau_id !== 'PULAU-06' && !p.nama_pulau.toLowerCase().includes('bokor'));
+    const list: Pulau[] = this.getSafeArray<Pulau>(STORAGE_KEYS.PULAU, INITIAL_PULAU);
+    return list.filter(p => p && p.pulau_id !== 'PULAU-06' && !p.nama_pulau.toLowerCase().includes('bokor'));
   }
 
   public getPulauById(id: string): Pulau | undefined {
@@ -275,6 +371,61 @@ class StorageService {
     return saved;
   }
 
+  public deleteSasaran(id: string): boolean {
+    const list = this.getSasaranList();
+    const target = list.find(s => s.sasaran_id === id);
+    if (!target) return false;
+    const filtered = list.filter(s => s.sasaran_id !== id);
+    localStorage.setItem(STORAGE_KEYS.SASARAN, JSON.stringify(filtered));
+    this.addLog('CANCEL', 'SASARAN', id, `Menghapus data sasaran balita ${target.kode_sasaran} (${target.inisial})`, 'SUCCESS');
+    return true;
+  }
+
+  public importSasaranBatch(items: Partial<SasaranBalita>[]): { count: number; imported: SasaranBalita[] } {
+    const currentList = this.getSasaranList();
+    const imported: SasaranBalita[] = [];
+
+    items.forEach((item, index) => {
+      const pid = item.pulau_id || 'PULAU-01';
+      const pulau = this.getPulauById(pid);
+      const pulauCode = pulau ? pulau.nama_pulau.substring(6, 9).toUpperCase() : 'TDG';
+      const uniqueCode = item.kode_sasaran || `BLT-${pulauCode}-${Math.floor(100 + Math.random() * 899)}`;
+
+      const newSasaran: SasaranBalita = {
+        sasaran_id: item.sasaran_id || `SAS-IMP-${Date.now().toString().slice(-4)}-${index + 1}`,
+        kode_sasaran: uniqueCode,
+        inisial: item.inisial || 'An. Balita',
+        tanggal_lahir: item.tanggal_lahir || '01/01/2024',
+        jenis_kelamin: (item.jenis_kelamin === 'P' || String(item.jenis_kelamin).toUpperCase().startsWith('P')) ? 'P' : 'L',
+        pulau_id: pid,
+        unit_pelayanan: item.unit_pelayanan || pulau?.unit_pelayanan || 'Puskesmas Kepulauan Seribu Selatan',
+        tanggal_registrasi: item.tanggal_registrasi || this.getTodayFormatted(),
+        status_aktif: true,
+        kategori_masalah_terakhir: item.kategori_masalah_terakhir || 'Gizi Baik (Normal)',
+        bb_terakhir: typeof item.bb_terakhir === 'number' ? item.bb_terakhir : parseFloat(String(item.bb_terakhir || 10)),
+        tb_terakhir: typeof item.tb_terakhir === 'number' ? item.tb_terakhir : parseFloat(String(item.tb_terakhir || 80)),
+        tanggal_pantau_terakhir: item.tanggal_pantau_terakhir || this.getTodayFormatted(),
+        bulan_pengukuran: item.bulan_pengukuran || 'Oktober 2026',
+        posyandu: item.posyandu || 'Posyandu Mawar I',
+        kelurahan_id: item.kelurahan_id,
+        kelurahan_nama: item.kelurahan_nama,
+        nik: item.nik || '',
+        nama_ortu: item.nama_ortu || '',
+        no_wa_ortu: item.no_wa_ortu || '',
+        alamat: item.alamat || '',
+        rt_rw: item.rt_rw || '',
+        lila: item.lila
+      };
+
+      currentList.unshift(newSasaran);
+      imported.push(newSasaran);
+    });
+
+    localStorage.setItem(STORAGE_KEYS.SASARAN, JSON.stringify(currentList));
+    this.addLog('CREATE', 'SASARAN', `IMP-${imported.length}`, `Berhasil mengimpor ${imported.length} data sasaran balita dari Excel`, 'SUCCESS');
+    return { count: imported.length, imported };
+  }
+
   // --- Tindak Lanjut ---
   public getTindakLanjutList(filter?: GlobalFilter): TindakLanjut[] {
     const raw = localStorage.getItem(STORAGE_KEYS.TINDAK_LANJUT);
@@ -329,7 +480,7 @@ class StorageService {
       this.addLog('CREATE', 'TINDAK_LANJUT', saved.tindak_lanjut_id, `Rencana tindak lanjut dibuat untuk sasaran ${saved.sasaran_id}`, 'SUCCESS');
     }
 
-    localStorage.setItem(STORAGE_KEYS.TINDAK_LANJUT, JSON.stringify(list));
+    this.safeSetItem(STORAGE_KEYS.TINDAK_LANJUT, JSON.stringify(list));
     return saved;
   }
 
@@ -609,6 +760,13 @@ class StorageService {
     localStorage.setItem(STORAGE_KEYS.WA_NOTIFS, JSON.stringify(list));
   }
 
+  public getAppUrl(): string {
+    if (typeof window !== 'undefined' && window.location && window.location.origin) {
+      return window.location.origin;
+    }
+    return 'https://dermagagizi.puskesmasseribuselatan.com';
+  }
+
   /**
    * Mengirim notifikasi WA ke Petugas, Kader, dan Lintas Sektor saat data sasaran baru ditambah
    */
@@ -616,6 +774,7 @@ class StorageService {
     const users = this.getUsers();
     const pulau = this.getPulauById(sasaran.pulau_id);
     const createdNotifs: any[] = [];
+    const appUrl = this.getAppUrl();
 
     // Kirim ke Petugas Gizi, Kader, dan Lintas Sektor di pulau terkait
     const recipients = users.filter(u => 
@@ -631,6 +790,7 @@ class StorageService {
         `• Wilayah: *${pulau?.nama_pulau || sasaran.pulau_id}*\n` +
         `• Status Gizi Terakhir: *${sasaran.kategori_masalah_terakhir || 'Gizi Baik'}*\n` +
         `• Antropometri: BB ${sasaran.bb_terakhir}kg, TB ${sasaran.tb_terakhir}cm\n\n` +
+        `🔗 *Buka Aplikasi:* ${appUrl}\n\n` +
         `Mohon segera memantau dan mengoordinasikan intervensi lapangan melalui Dashboard DERMAGA GIZI.`;
 
       const linkWa = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
@@ -685,6 +845,7 @@ class StorageService {
         `• Tenggat Waktu: *${tl.tenggat}*\n` +
         `• Status: *${tl.status}* | Prioritas: *${tl.prioritas}*\n` +
         `• Penanggung Jawab: *${pjUser?.nama || tl.petugas_id}*\n\n` +
+        `🔗 *Buka Aplikasi:* ${this.getAppUrl()}\n\n` +
         `Terima kasih atas dedikasi dan kolaborasi lintas sektor Anda.`;
 
       const linkWa = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
@@ -736,6 +897,7 @@ class StorageService {
         `• Batas Tenggat: *${tl.tenggat}* (MELEWATI BATAS WAKTU)\n` +
         `• Status Terkini: *${tl.status}*\n` +
         `• Petugas PJ: *${pjUser?.nama || tl.petugas_id}*\n\n` +
+        `🔗 *Buka Aplikasi:* ${this.getAppUrl()}\n\n` +
         `Diharapkan pihak terkait segera mengambil tindakan penanganan dan memperbarui status pada aplikasi DERMAGA GIZI.`;
 
       const linkWa = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
@@ -895,8 +1057,17 @@ class StorageService {
   // --- MASTER DATA KELURAHAN & POSYANDU ---
   // ==========================================
   public getKelurahanList(): Kelurahan[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.KELURAHAN);
-    return raw ? JSON.parse(raw) : INITIAL_KELURAHAN;
+    const list = this.getSafeArray<Kelurahan>(STORAGE_KEYS.KELURAHAN, INITIAL_KELURAHAN);
+    return list.map(k => ({
+      ...k,
+      nama_kelurahan: k.nama_kelurahan || 'Kelurahan',
+      kecamatan: k.kecamatan || 'Kecamatan Kepulauan Seribu Selatan',
+      lurah_nama: k.lurah_nama || 'Lurah',
+      no_wa_lurah: k.no_wa_lurah || '6281234567890',
+      jumlah_rw: typeof k.jumlah_rw === 'number' ? k.jumlah_rw : 4,
+      jumlah_rt: typeof k.jumlah_rt === 'number' ? k.jumlah_rt : 20,
+      daftar_pulau: Array.isArray(k.daftar_pulau) ? k.daftar_pulau : ['Pulau']
+    }));
   }
 
   public getKelurahanById(id: string): Kelurahan | undefined {
@@ -916,12 +1087,29 @@ class StorageService {
   }
 
   public getPosyanduList(kelurahanId?: string): Posyandu[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.POSYANDU);
-    let list: Posyandu[] = raw ? JSON.parse(raw) : INITIAL_POSYANDU;
+    const list = this.getSafeArray<Posyandu>(STORAGE_KEYS.POSYANDU, INITIAL_POSYANDU);
+    const sanitized = list.map(p => ({
+      ...p,
+      posyandu_id: p.posyandu_id || `POS-${Math.floor(100 + Math.random() * 900)}`,
+      nama_posyandu: p.nama_posyandu || 'Posyandu',
+      kelurahan_id: p.kelurahan_id || 'KEL-01',
+      kelurahan_nama: p.kelurahan_nama || 'Kelurahan Pulau Tidung',
+      pulau_id: p.pulau_id || 'PULAU-01',
+      pulau_nama: p.pulau_nama || 'Pulau Tidung',
+      rw: p.rw || 'RW 01',
+      rt: p.rt || 'RT 01',
+      lokasi_alamat: p.lokasi_alamat || 'Balai Warga',
+      ketua_kader: p.ketua_kader || 'Kader Posyandu',
+      no_wa_kader: p.no_wa_kader || '6281234567890',
+      jumlah_kader: typeof p.jumlah_kader === 'number' ? p.jumlah_kader : 5,
+      jadwal_hari: p.jadwal_hari || 'Minggu ke-2 setiap bulan',
+      total_sasaran: typeof p.total_sasaran === 'number' ? p.total_sasaran : 80,
+      status_aktif: p.status_aktif ?? true
+    }));
     if (kelurahanId && kelurahanId !== 'ALL') {
-      list = list.filter(p => p.kelurahan_id === kelurahanId);
+      return sanitized.filter(p => p.kelurahan_id === kelurahanId);
     }
-    return list;
+    return sanitized;
   }
 
   public getPosyanduById(id: string): Posyandu | undefined {
@@ -955,12 +1143,24 @@ class StorageService {
   // --- MASTER USER LINTAS SEKTOR ---
   // ==========================================
   public getUserLintasSektorList(kelurahanId?: string): UserLintasSektor[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.USER_LINTAS_SEKTOR);
-    let list: UserLintasSektor[] = raw ? JSON.parse(raw) : INITIAL_USER_LINTAS_SEKTOR;
+    const list = this.getSafeArray<UserLintasSektor>(STORAGE_KEYS.USER_LINTAS_SEKTOR, INITIAL_USER_LINTAS_SEKTOR);
+    const sanitized = list.map(u => ({
+      ...u,
+      user_id: u.user_id || `ULS-${Math.floor(100 + Math.random() * 900)}`,
+      nama: u.nama || 'Petugas Lintas Sektor',
+      jabatan: u.jabatan || 'Koordinator Lintas Sektor',
+      instansi_sektor: u.instansi_sektor || 'Instansi Terkait',
+      kelurahan_id: u.kelurahan_id || 'ALL',
+      kelurahan_nama: u.kelurahan_nama || 'Kecamatan / Semua Wilayah',
+      no_wa: u.no_wa || '6281234567890',
+      email: u.email || '',
+      status_notifikasi_wa: u.status_notifikasi_wa ?? true,
+      status_aktif: u.status_aktif ?? true
+    }));
     if (kelurahanId && kelurahanId !== 'ALL') {
-      list = list.filter(u => u.kelurahan_id === kelurahanId || u.kelurahan_id === 'ALL');
+      return sanitized.filter(u => u.kelurahan_id === kelurahanId || u.kelurahan_id === 'ALL');
     }
-    return list;
+    return sanitized;
   }
 
   public saveUserLintasSektor(user: UserLintasSektor) {
@@ -1126,6 +1326,7 @@ class StorageService {
           `⚠️ *DITEMUKAN BALITA BERMASALAH GIZI UNTUK SEGERA DITINDAKLANJUTI*:\n\n` +
           `${balitaTextList}\n\n` +
           `Mohon koordinasi segera seluruh unsur lintas sektor (Lurah, PKK, TPK, Bidan Desa, Puskesmas, dan Kader) untuk pendampingan dan penanganan di lapangan.\n\n` +
+          `🔗 *Buka Aplikasi:* ${this.getAppUrl()}\n\n` +
           `_Sistem Terpadu DERMAGA GIZI - Puskesmas Kepulauan Seribu Selatan_`;
 
         const notif: WhatsAppNotification = {
@@ -1329,7 +1530,8 @@ class StorageService {
   addTindakLanjutLintasSektor(
     tindakLanjutId: string, 
     aksiItem: Omit<TindakLanjutLintasSektor, 'id' | 'created_at'>,
-    sendNotification: boolean = true
+    sendNotification: boolean = true,
+    isPetugasGizi: boolean = false
   ): { updatedTL: TindakLanjut | null; notifications: WhatsAppNotification[] } {
     const list = this.getTindakLanjutList({ pulau_id: 'ALL', tahun: 'ALL', bulan: 'ALL' });
     const idx = list.findIndex(item => item.tindak_lanjut_id === tindakLanjutId);
@@ -1348,18 +1550,34 @@ class StorageService {
       newAksi
     ];
 
-    // Perbarui status umum tindak lanjut berdasarkan hasil aksi lintas sektor
+    // Jika ada foto di aksi, simpan referensi foto terakhir ke data utama
+    if (newAksi.foto_dokumen) {
+      targetTL.foto_dokumen = newAksi.foto_dokumen;
+      targetTL.foto_nama = newAksi.foto_nama;
+    }
+
+    // Perbarui status umum tindak lanjut berdasarkan hasil aksi lintas sektor:
+    // HANYA Petugas Kesehatan Gizi (TENAGA_GIZI / Nakes Gizi) yang berhak menyelesaikan status kasus balita menjadi 'Selesai'
     if (aksiItem.status_hasil === 'Selesai') {
-      targetTL.status = 'Selesai';
-      targetTL.tanggal_selesai = aksiItem.tanggal_pelaksanaan;
+      if (isPetugasGizi) {
+        targetTL.status = 'Selesai';
+        targetTL.tanggal_selesai = aksiItem.tanggal_pelaksanaan;
+      } else {
+        // Jika bukan petugas gizi, aksi sektor tercatat selesai, namun status kasus balita tetap 'Dalam proses' menunggu verifikasi petugas gizi
+        if (targetTL.status !== 'Selesai') {
+          targetTL.status = 'Dalam proses';
+        }
+      }
     } else if (aksiItem.status_hasil === 'Dalam proses') {
-      targetTL.status = 'Dalam proses';
+      if (targetTL.status !== 'Selesai') {
+        targetTL.status = 'Dalam proses';
+      }
     } else if (aksiItem.status_hasil === 'Perlu evaluasi ulang') {
       targetTL.status = 'Perlu evaluasi ulang';
     }
     targetTL.updated_at = this.getTodayFormatted();
     list[idx] = targetTL;
-    localStorage.setItem(STORAGE_KEYS.TINDAK_LANJUT, JSON.stringify(list));
+    this.safeSetItem(STORAGE_KEYS.TINDAK_LANJUT, JSON.stringify(list));
 
     const sasaran = this.getSasaranById(targetTL.sasaran_id);
     const notifications: WhatsAppNotification[] = [];
@@ -1379,6 +1597,7 @@ class StorageService {
       );
 
       const balitaName = sasaran ? `${sasaran.kode_sasaran} (${sasaran.inisial})` : 'Balita Binaan Posyandu';
+      const fotoNote = newAksi.foto_dokumen ? `📷 *Foto/Dokumen Bukti:* Terlampir di Aplikasi\n` : '';
       const pesan = 
         `✅ *UPDATE TINDAK LANJUT LINTAS SEKTOR - DERMAGA GIZI*\n` +
         `*PUSKESMAS KEPULAUAN SERIBU SELATAN*\n\n` +
@@ -1390,7 +1609,9 @@ class StorageService {
         `📅 *Tanggal Pelaksanaan*: ${aksiItem.tanggal_pelaksanaan}\n` +
         `⚡ *Aksi Nyata*: ${aksiItem.aksi_intervensi}\n` +
         `📊 *Status Hasil*: *${aksiItem.status_hasil}*\n` +
-        `📝 *Catatan Evaluasi*: ${aksiItem.catatan_evaluasi}\n\n` +
+        `📝 *Catatan Evaluasi*: ${aksiItem.catatan_evaluasi}\n` +
+        fotoNote +
+        `\n🔗 *Buka Aplikasi:* ${this.getAppUrl()}\n\n` +
         `_Terima kasih atas kolaborasi dan sinergi lintas sektor demi masa depan anak-anak sehat bebas stunting di Kepulauan Seribu Selatan._`;
 
       targets.forEach(t => {

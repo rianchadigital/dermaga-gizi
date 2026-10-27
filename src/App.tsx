@@ -22,7 +22,9 @@ import { InputLaporanPosyanduView } from './components/views/InputLaporanPosyand
 import { UsersView } from './components/views/UsersView';
 import { SettingsView } from './components/views/SettingsView';
 import { PanduanView } from './components/views/PanduanView';
+import { WelcomeLoginView } from './components/views/WelcomeLoginView';
 import { WhatsAppNotificationModal } from './components/common/WhatsAppNotificationModal';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { storageService } from './services/storageService';
 import { apiService } from './services/apiService';
 import { GlobalFilter, Pulau, User } from './types';
@@ -60,6 +62,11 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User>(() => storageService.getCurrentUser());
   const [users, setUsers] = useState<User[]>(() => storageService.getUsers());
 
+  // Status Login & Landing Page
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    return localStorage.getItem('dermaga_is_logged_in') === 'true';
+  });
+
   // Dark Mode Effect on HTML Root Element
   useEffect(() => {
     if (isDarkMode) {
@@ -82,6 +89,16 @@ export default function App() {
       return next;
     });
   };
+
+  // Batasi akses modul untuk peran KADER: hanya Beranda (dashboard), Peta Wilayah (map), dan Daftar Tindak Lanjut (tindak-lanjut)
+  useEffect(() => {
+    if (currentUser.role === 'KADER') {
+      const allowed = ['dashboard', 'map', 'tindak-lanjut'];
+      if (!allowed.includes(activeTab)) {
+        setActiveTab('dashboard');
+      }
+    }
+  }, [currentUser.role, activeTab]);
 
   // Hitung Badge Notifikasi Sidebar
   const stats = storageService.getDashboardStats(filter);
@@ -120,11 +137,27 @@ export default function App() {
   const handleSwitchUser = (userId: string) => {
     storageService.setCurrentUser(userId);
     const u = storageService.getCurrentUser();
-    // Jika peran yang dipilih adalah KADER (Petugas Posyandu), arahkan ke menu yang diizinkan jika sedang di luar menu kader
-    if (u.role === 'KADER' && activeTab !== 'dashboard' && activeTab !== 'map' && activeTab !== 'input-posyandu') {
-      setActiveTab('input-posyandu');
+    // Jika peran yang dipilih adalah KADER, arahkan ke menu wewenang kader: Beranda, Peta Wilayah, atau Daftar Tindak Lanjut
+    if (u.role === 'KADER' && activeTab !== 'dashboard' && activeTab !== 'map' && activeTab !== 'tindak-lanjut') {
+      setActiveTab('dashboard');
     }
     handleRefreshData();
+  };
+
+  const handleLogin = (user: User) => {
+    storageService.setCurrentUser(user.user_id);
+    setCurrentUser(user);
+    localStorage.setItem('dermaga_is_logged_in', 'true');
+    setIsLoggedIn(true);
+    if (user.role === 'KADER') {
+      setActiveTab('dashboard');
+    }
+    handleRefreshData();
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('dermaga_is_logged_in');
+    setIsLoggedIn(false);
   };
 
   const handleNavigateTab = (tab: ActiveTab, params?: { pulauId?: string; tlId?: string }) => {
@@ -138,6 +171,16 @@ export default function App() {
     setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // Jika belum login, tampilkan halaman awal ringkasan Dermaga Gizi & Form Login
+  if (!isLoggedIn) {
+    return (
+      <WelcomeLoginView 
+        users={users} 
+        onLogin={handleLogin} 
+      />
+    );
+  }
 
   return (
     <div className={`min-h-screen ${isDarkMode ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800'} flex flex-col font-sans transition-colors duration-200`}>
@@ -153,6 +196,7 @@ export default function App() {
         onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
         waNotifCount={waNotifCount}
         currentUser={currentUser}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Area */}
@@ -176,11 +220,17 @@ export default function App() {
           onOpenSettings={() => setActiveTab('settings')}
           onOpenWhatsAppModal={() => setIsWhatsAppModalOpen(true)}
           waNotifCount={waNotifCount}
+          onLogout={handleLogout}
         />
 
         {/* Viewport Content */}
         <main className="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto">
-          {activeTab === 'dashboard' && (
+          <ErrorBoundary
+            key={activeTab}
+            fallbackTitle={`Terjadi Kendala Memuat Modul ${activeTab}`}
+            onReset={() => setActiveTab('dashboard')}
+          >
+            {activeTab === 'dashboard' && (
             <DashboardView
               filter={filter}
               setFilter={setFilter}
@@ -304,6 +354,7 @@ export default function App() {
               onRefreshData={handleRefreshData}
             />
           )}
+          </ErrorBoundary>
         </main>
 
         {/* Global Footer */}

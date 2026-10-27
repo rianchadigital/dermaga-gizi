@@ -66,6 +66,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRefreshData }) => 
 
   // Setup Database State
   const [setupLoading, setSetupLoading] = useState(false);
+  const [clearLoading, setClearLoading] = useState(false);
   const [setupResult, setSetupResult] = useState<{
     executed: boolean;
     success: boolean;
@@ -125,6 +126,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRefreshData }) => 
       });
     } finally {
       setSetupLoading(false);
+    }
+  };
+
+  const handleTriggerClearDatabase = async () => {
+    if (!window.confirm('Apakah Anda yakin ingin membersihkan semua baris data di Google Spreadsheet? Hanya baris 1 (Header Kolom) yang akan dipertahankan.')) {
+      return;
+    }
+    setClearLoading(true);
+    try {
+      const res = await apiService.clearAllDatabaseRows(gasUrl);
+      alert(res.message || 'Pembersihan data di spreadsheet selesai.');
+      if (res.success) {
+        onRefreshData();
+      }
+    } catch (e: any) {
+      alert('Gagal membersihkan data: ' + e.message);
+    } finally {
+      setClearLoading(false);
     }
   };
 
@@ -293,18 +312,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRefreshData }) => 
                 </p>
               </div>
 
-              <button
-                onClick={handleTriggerSetupDatabase}
-                disabled={setupLoading || !gasUrl.trim()}
-                className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 shrink-0 disabled:opacity-50"
-              >
-                {setupLoading ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Sparkles className="w-4 h-4 text-amber-300" />
-                )}
-                <span>{setupLoading ? 'Memproses Database...' : 'Jalankan setupDatabase() Sekarang'}</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  onClick={handleTriggerSetupDatabase}
+                  disabled={setupLoading || !gasUrl.trim()}
+                  className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  {setupLoading ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4 text-amber-300" />
+                  )}
+                  <span>{setupLoading ? 'Memproses Database...' : 'Jalankan setupDatabase()'}</span>
+                </button>
+
+                <button
+                  onClick={handleTriggerClearDatabase}
+                  disabled={clearLoading || !gasUrl.trim()}
+                  className="px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 font-bold text-xs rounded-xl border border-rose-200 dark:border-rose-900/60 transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                  title="Menghapus seluruh baris data di sheet dan menyisakan header kolom"
+                >
+                  {clearLoading ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+                  )}
+                  <span>{clearLoading ? 'Membersihkan...' : 'Bersihkan Data di Sheet'}</span>
+                </button>
+              </div>
             </div>
 
             {/* Setup execution status */}

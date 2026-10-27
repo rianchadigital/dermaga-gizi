@@ -17,7 +17,8 @@ import {
   ShieldAlert,
   Building2,
   Scale,
-  Contact2
+  Contact2,
+  LogOut
 } from 'lucide-react';
 import { Logo } from './Logo';
 import { User } from '../../types';
@@ -49,6 +50,7 @@ interface SidebarProps {
   onOpenWhatsAppModal: () => void;
   waNotifCount: number;
   currentUser?: User;
+  onLogout?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -60,12 +62,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setIsOpenMobile,
   onOpenWhatsAppModal,
   waNotifCount,
-  currentUser
+  currentUser,
+  onLogout
 }) => {
-  // Sesuai instruksi: Petugas Posyandu (role KADER) HANYA muncul 3 menu:
+  // Sesuai instruksi: Login kader HANYA melihat:
   // 1. Beranda / Ringkasan
   // 2. Peta Wilayah
-  // 3. Input Laporan Posyandu
+  // 3. Daftar Tindak Lanjut (Wewenang Kader)
   const isKader = currentUser?.role === 'KADER';
 
   const kaderNav = [
@@ -82,11 +85,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge: null
     },
     {
-      id: 'input-posyandu',
-      label: 'Input Laporan Posyandu',
-      icon: Scale,
-      badge: 'Utama',
-      badgeColor: 'bg-emerald-500 text-white font-bold'
+      id: 'tindak-lanjut',
+      label: 'Daftar Tindak Lanjut',
+      icon: ClipboardList,
+      badge: overdueCount > 0 ? `${overdueCount}` : null,
+      badgeColor: 'bg-rose-500 text-white font-bold'
     }
   ];
 
@@ -250,10 +253,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="mx-3 mt-3 p-2.5 rounded-xl bg-emerald-950/50 border border-emerald-500/30 text-emerald-200 text-xs">
             <div className="font-bold flex items-center gap-1.5 text-emerald-300">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Akses Petugas Posyandu</span>
+              <span>Akses Kader Posyandu</span>
             </div>
             <p className="text-[10px] text-emerald-200/80 mt-1 leading-tight">
-              Menampilkan menu esensial kader: Beranda, Peta Wilayah, dan Input Laporan.
+              Menu wewenang kader: Beranda / Ringkasan, Peta Wilayah, dan Daftar Tindak Lanjut.
             </p>
           </div>
         )}
@@ -319,6 +322,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <p className="text-[10px] text-slate-300/90 leading-relaxed mt-1">
                 Integrasi Data untuk Pelayanan Gizi Balita yang Lebih Merata dan Berkelanjutan
               </p>
+
+              {onLogout && (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="mt-2.5 w-full py-1.5 px-2 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Keluar dari Aplikasi</span>
+                </button>
+              )}
             </div>
 
             {/* Subtle island landscape silhouettes in background */}

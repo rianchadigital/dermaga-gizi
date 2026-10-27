@@ -46,34 +46,38 @@ export const MasterLintasSektorView: React.FC<MasterLintasSektorViewProps> = ({
   onRefreshData
 }) => {
   const kelurahanList = storageService.getKelurahanList();
+  const safeKelurahanList = Array.isArray(kelurahanList) ? kelurahanList : [];
   const [filterKelurahan, setFilterKelurahan] = useState<string>('ALL');
   const [filterInstansi, setFilterInstansi] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const lintasSektorList = storageService.getUserLintasSektorList(filterKelurahan);
+  const safeLintasSektorList = Array.isArray(lintasSektorList) ? lintasSektorList : [];
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Partial<UserLintasSektor>>({});
 
-  const canManage = currentUser.role === 'ADMIN' || currentUser.role === 'KEPALA_PUSKESMAS' || currentUser.role === 'TENAGA_GIZI';
+  const canManage = currentUser?.role === 'ADMIN' || currentUser?.role === 'KEPALA_PUSKESMAS' || currentUser?.role === 'TENAGA_GIZI';
 
   // Filtered list
-  const filteredUsers = lintasSektorList.filter(u => {
-    if (filterInstansi !== 'ALL' && !u.instansi_sektor.toLowerCase().includes(filterInstansi.toLowerCase())) {
+  const filteredUsers = safeLintasSektorList.filter(u => {
+    if (!u) return false;
+    const instansi = (u.instansi_sektor || '').toLowerCase();
+    if (filterInstansi !== 'ALL' && !instansi.includes(filterInstansi.toLowerCase())) {
       return false;
     }
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
-      u.nama.toLowerCase().includes(q) ||
-      u.jabatan.toLowerCase().includes(q) ||
-      u.instansi_sektor.toLowerCase().includes(q) ||
-      u.no_wa.includes(q)
+      (u.nama || '').toLowerCase().includes(q) ||
+      (u.jabatan || '').toLowerCase().includes(q) ||
+      instansi.includes(q) ||
+      (u.no_wa || '').includes(q)
     );
   });
 
-  const totalActiveWa = lintasSektorList.filter(u => u.status_notifikasi_wa).length;
+  const totalActiveWa = safeLintasSektorList.filter(u => u && u.status_notifikasi_wa).length;
 
   const handleOpenAdd = () => {
     setEditingUser({
@@ -204,7 +208,7 @@ export const MasterLintasSektorView: React.FC<MasterLintasSektorViewProps> = ({
             className="text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-slate-800 dark:text-slate-200"
           >
             <option value="ALL">Semua Wilayah Tugas</option>
-            {kelurahanList.map(k => (
+            {safeKelurahanList.map(k => (
               <option key={k.kelurahan_id} value={k.kelurahan_id}>{k.nama_kelurahan}</option>
             ))}
           </select>
@@ -255,7 +259,7 @@ export const MasterLintasSektorView: React.FC<MasterLintasSektorViewProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
               {filteredUsers.map((u) => {
-                const phoneClean = u.no_wa.replace(/\D/g, '');
+                const phoneClean = (u.no_wa || '').replace(/\D/g, '');
                 return (
                   <tr key={u.user_id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3 px-4">
@@ -425,7 +429,7 @@ export const MasterLintasSektorView: React.FC<MasterLintasSektorViewProps> = ({
                     className="w-full text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-slate-800 dark:text-slate-200"
                   >
                     <option value="ALL">Kecamatan (Semua Kelurahan)</option>
-                    {kelurahanList.map(k => (
+                    {safeKelurahanList.map(k => (
                       <option key={k.kelurahan_id} value={k.kelurahan_id}>{k.nama_kelurahan}</option>
                     ))}
                   </select>

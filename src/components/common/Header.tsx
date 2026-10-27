@@ -13,7 +13,8 @@ import {
   ChevronDown,
   Layers,
   CheckSquare,
-  Sparkles
+  Sparkles,
+  LogOut
 } from 'lucide-react';
 import { GlobalFilter, Pulau, User } from '../../types';
 import { apiService } from '../../services/apiService';
@@ -35,6 +36,7 @@ interface HeaderProps {
   onOpenSettings: () => void;
   onOpenWhatsAppModal: () => void;
   waNotifCount: number;
+  onLogout?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -53,7 +55,8 @@ export const Header: React.FC<HeaderProps> = ({
   onRefreshData,
   onOpenSettings,
   onOpenWhatsAppModal,
-  waNotifCount
+  waNotifCount,
+  onLogout
 }) => {
   const isConnected = apiService.isConnected();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -185,7 +188,7 @@ export const Header: React.FC<HeaderProps> = ({
                     </button>
                   ))}
                 </div>
-                <div className="px-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div className="px-3 pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
                   <button
                     onClick={() => {
                       setIsUserMenuOpen(false);
@@ -195,10 +198,33 @@ export const Header: React.FC<HeaderProps> = ({
                   >
                     Buka Pengaturan & API Database
                   </button>
+                  {onLogout && (
+                    <button
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        onLogout();
+                      }}
+                      className="w-full flex items-center justify-center gap-1.5 py-1.5 text-xs text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg font-semibold transition-colors cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Keluar (Logout)</span>
+                    </button>
+                  )}
                 </div>
               </div>
             )}
           </div>
+
+          {/* Quick Logout Header Icon */}
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              title="Keluar dari Aplikasi (Logout)"
+              className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
 
         </div>
       </div>

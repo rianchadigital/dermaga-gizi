@@ -23,7 +23,10 @@ import {
   X,
   Search,
   Filter,
-  Check
+  Check,
+  Upload,
+  Download,
+  FileSpreadsheet
 } from 'lucide-react';
 import { 
   Kelurahan, 
@@ -133,6 +136,110 @@ export const InputLaporanPosyanduView: React.FC<InputLaporanPosyanduViewProps> =
 
   // Modal Detail Laporan Riwayat
   const [selectedDetailLaporan, setSelectedDetailLaporan] = useState<LaporanPosyandu | null>(null);
+
+  // Modal Import Excel / CSV Balita Kurang Gizi
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importFileText, setImportFileText] = useState('');
+  const [parsedImportItems, setParsedImportItems] = useState<BalitaKurangGiziInput[]>([]);
+  const [importFeedback, setImportFeedback] = useState<string>('');
+
+  const handleDownloadTemplate = () => {
+    const headers = "Nama Balita,NIK,Nama Orang Tua,No WA Ortu,Jenis Kelamin (L/P),Tanggal Lahir (YYYY-MM-DD),Usia (Bulan),Berat Badan (kg),Tinggi Badan (cm),LiLA (cm),Status Gizi,Catatan Kondisi,Rencana Tindak Lanjut\n";
+    const sample1 = "Muhammad Rizky,3101015609230001,Siti Aminah,081234567890,L,2024-04-10,22,7.4,74.5,11.2,Wasting (Kurus/Gizi Kurang),Nafsu makan menurun BB tidak naik 2x,Pemberian PMT Pemulihan pangan lokal dan kunjungan rumah\n";
+    const sample2 = "Aisyah Zahra,3101014502240002,Nurhasanah,081398765432,P,2024-07-20,18,6.8,71.0,11.0,Stunting (Pendek),Tinggi badan di bawah -2 SD PB/U,Pendampingan Dasawisma PKK dan suplementasi zink\n";
+    const blob = new Blob([headers + sample1 + sample2], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Template_Import_Balita_Gizi_Kurang.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const parseCSVData = (text: string): BalitaKurangGiziInput[] => {
+    const lines = text.trim().split(/\r?\n/).filter(l => l.trim().length > 0);
+    if (lines.length === 0) return [];
+    
+    // Jika baris pertama berisi kata nama/nik, kita anggap sebagai header
+    const hasHeader = lines[0].toLowerCase().includes('nama') || lines[0].toLowerCase().includes('nik');
+    const dataLines = hasHeader ? lines.slice(1) : lines;
+    const items: BalitaKurangGiziInput[] = [];
+
+    dataLines.forEach((line, index) => {
+      // Split koma atau semicolon atau tab
+      const cols = line.split(/[,;\t]/).map(c => c.trim().replace(/^["']|["']$/g, ''));
+      if (cols.length >= 1 && cols[0]) {
+        const nama = cols[0];
+        const nik = cols[1] || '';
+        const namaOrtu = cols[2] || '';
+        const noWa = cols[3] || '';
+        const jk = (cols[4]?.toUpperCase() === 'P' || cols[4]?.toUpperCase() === 'PEREMPUAN') ? 'P' : 'L';
+        const tglLahir = cols[5] || '2024-05-01';
+        const usia = Number(cols[6]) || 20;
+        const bb = Number(cols[7]) || 7.5;
+        const tb = Number(cols[8]) || 75.0;
+        const lila = Number(cols[9]) || 11.5;
+        
+        let statusGizi: KategoriMasalahGizi = 'Wasting (Kurus/Gizi Kurang)';
+        const rawStatus = (cols[10] || '').toLowerCase();
+        if (rawStatus.includes('buruk')) statusGizi = 'Gizi Buruk';
+        else if (rawStatus.includes('stunting') || rawStatus.includes('pendek')) statusGizi = 'Stunting (Pendek)';
+        else if (rawStatus.includes('underweight') || rawStatus.includes('bb kurang')) statusGizi = 'Underweight (BB Kurang)';
+        else if (rawStatus.includes('lebih') || rawStatus.includes('obesitas')) statusGizi = 'Risiko Gizi Lebih / Obesitas';
+        else if (rawStatus.includes('baik') || rawStatus.includes('normal')) statusGizi = 'Gizi Baik (Normal)';
+
+        const catatan = cols[11] || 'Teridentifikasi pada rekapitulasi data gizi balita posyandu.';
+        const rencana = cols[12] || 'Pemberian PMT Pemulihan pangan lokal berprotein tinggi dan rujukan poli gizi puskesmas.';
+
+        items.push({
+          id: `BG-IMP-${Date.now()}-${index}-${Math.floor(Math.random() * 1000)}`,
+          nama_balita: nama,
+          nik,
+          nama_ortu: namaOrtu,
+          no_wa_ortu: noWa,
+          jenis_kelamin: jk,
+          tanggal_lahir: tglLahir,
+          usia_bulan: usia,
+          berat_badan: bb,
+          tinggi_badan: tb,
+          lila,
+          status_gizi: statusGizi,
+          catatan_kondisi: catatan,
+          rencana_tindak_lanjut: rencana
+        });
+      }
+    });
+
+    return items;
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (uploadEvent) => {
+      const text = uploadEvent.target?.result as string;
+      setImportFileText(text);
+      const parsed = parseCSVData(text);
+      setParsedImportItems(parsed);
+      setImportFeedback(`Berhasil memuat ${parsed.length} data balita dari berkas ${file.name}`);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleApplyImportedBalita = () => {
+    if (parsedImportItems.length === 0) {
+      alert('Tidak ada data balita yang valid untuk diimpor.');
+      return;
+    }
+    setDaftarBalitaKurangGizi(prev => [...prev, ...parsedImportItems]);
+    setIsImportModalOpen(false);
+    setImportFileText('');
+    setParsedImportItems([]);
+    setImportFeedback('');
+  };
 
   // Handler Tambah Item Balita Kurang Gizi
   const handleAddBalitaKurangGizi = () => {
@@ -532,14 +639,36 @@ export const InputLaporanPosyanduView: React.FC<InputLaporanPosyanduViewProps> =
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={handleAddBalitaKurangGizi}
-                className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all self-start sm:self-auto cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>+ Tambah Balita Bermasalah Gizi</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={handleDownloadTemplate}
+                  className="px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-300 dark:border-slate-700 cursor-pointer shadow-2xs"
+                  title="Unduh Format Berkas Excel CSV untuk Input Cepat"
+                >
+                  <Download className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Format Excel</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                  title="Upload berkas Excel/CSV untuk input cepat data gizi balita"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Import Excel / CSV</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleAddBalitaKurangGizi}
+                  className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Tambah Manual</span>
+                </button>
+              </div>
             </div>
 
             {daftarBalitaKurangGizi.length === 0 ? (
@@ -1183,6 +1312,187 @@ export const InputLaporanPosyanduView: React.FC<InputLaporanPosyanduViewProps> =
               >
                 <Printer className="w-4 h-4" />
                 <span>Cetak Lembar Rekapitulasi</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL IMPORT EXCEL / CSV BALITA KURANG GIZI */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-3xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto text-xs">
+            
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                    Import Data Balita Kurang Gizi (Excel / CSV)
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Unggah berkas spreadsheet atau salin-tempel baris data untuk mempercepat pengisian
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsImportModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Tombol Unduh Format Template */}
+            <div className="p-3.5 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="font-bold text-emerald-900 dark:text-emerald-200">
+                  Gunakan Template Standar Puskesmas Kepulauan Seribu Selatan
+                </div>
+                <div className="text-[11px] text-emerald-700 dark:text-emerald-400">
+                  Format memuat kolom nama balita, NIK, orang tua, nomor WA, usia, BB, TB, LiLA, dan status masalah gizi.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleDownloadTemplate}
+                className="px-3.5 py-1.5 bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 rounded-xl font-bold flex items-center gap-1.5 shadow-2xs hover:bg-emerald-50 shrink-0 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Unduh Format CSV</span>
+              </button>
+            </div>
+
+            {/* Upload File Input */}
+            <div>
+              <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                Pilih Berkas Spreadsheet (.csv, .txt):
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="file"
+                  accept=".csv, .txt"
+                  id="excel-csv-upload-input"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="excel-csv-upload-input"
+                  className="px-4 py-2.5 rounded-xl border border-dashed border-emerald-300 dark:border-emerald-700 bg-slate-50 dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-slate-750 font-semibold cursor-pointer flex items-center gap-2 transition-colors shadow-2xs"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>Pilih Berkas dari Komputer/Ponsel</span>
+                </label>
+                {importFeedback && (
+                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                    ✓ {importFeedback}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Alternatif: Salin-Tempel Teks CSV */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="font-semibold text-slate-700 dark:text-slate-300">
+                  Atau Tempel (Paste) Baris Data Langsung dari Excel:
+                </label>
+                {importFileText && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportFileText('');
+                      setParsedImportItems([]);
+                      setImportFeedback('');
+                    }}
+                    className="text-rose-500 hover:text-rose-700 font-semibold text-[10px]"
+                  >
+                    Bersihkan
+                  </button>
+                )}
+              </div>
+              <textarea
+                rows={4}
+                value={importFileText}
+                onChange={(e) => {
+                  const text = e.target.value;
+                  setImportFileText(text);
+                  const parsed = parseCSVData(text);
+                  setParsedImportItems(parsed);
+                  if (parsed.length > 0) {
+                    setImportFeedback(`Terdeteksi ${parsed.length} baris data balita.`);
+                  }
+                }}
+                placeholder="Contoh: Muhammad Rizky,3101015609230001,Siti Aminah,081234567890,L,2024-04-10,22,7.4,74.5,11.2,Wasting (Kurus/Gizi Kurang)..."
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono text-[11px] outline-none"
+              />
+            </div>
+
+            {/* Pratinjau Tabel Balita Terdeteksi */}
+            {parsedImportItems.length > 0 && (
+              <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    Pratinjau Data Siap Diimpor ({parsedImportItems.length} Balita):
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                    Valid
+                  </span>
+                </div>
+
+                <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                  <table className="w-full text-[11px]">
+                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 sticky top-0">
+                      <tr>
+                        <th className="py-2 px-2.5 text-left">No</th>
+                        <th className="py-2 px-2.5 text-left">Nama Balita</th>
+                        <th className="py-2 px-2.5 text-left">NIK</th>
+                        <th className="py-2 px-2.5 text-left">JK</th>
+                        <th className="py-2 px-2.5 text-left">Usia</th>
+                        <th className="py-2 px-2.5 text-left">BB / TB</th>
+                        <th className="py-2 px-2.5 text-left">Status Gizi</th>
+                        <th className="py-2 px-2.5 text-left">Orang Tua</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {parsedImportItems.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                          <td className="py-1.5 px-2.5 text-slate-400">{idx + 1}</td>
+                          <td className="py-1.5 px-2.5 font-bold text-slate-800 dark:text-slate-200">{item.nama_balita}</td>
+                          <td className="py-1.5 px-2.5 font-mono text-[10px] text-slate-500">{item.nik || '-'}</td>
+                          <td className="py-1.5 px-2.5">{item.jenis_kelamin}</td>
+                          <td className="py-1.5 px-2.5">{item.usia_bulan} bln</td>
+                          <td className="py-1.5 px-2.5 font-semibold">{item.berat_badan}kg / {item.tinggi_badan}cm</td>
+                          <td className="py-1.5 px-2.5 font-semibold text-rose-600">{item.status_gizi}</td>
+                          <td className="py-1.5 px-2.5 text-slate-500">{item.nama_ortu || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsImportModalOpen(false)}
+                className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-50 font-semibold cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleApplyImportedBalita}
+                disabled={parsedImportItems.length === 0}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>Terapkan {parsedImportItems.length > 0 ? `(${parsedImportItems.length} Data) ` : ''}ke Formulir</span>
               </button>
             </div>
 

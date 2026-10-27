@@ -20,7 +20,11 @@ import {
   Baby,
   Search,
   MessageCircle,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Check,
+  Eye,
+  Camera,
+  X
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -50,13 +54,33 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
   pulauList,
   currentUser
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'kelurahan' | 'posyandu' | 'ringkasan'>('kelurahan');
+  const [activeSubTab, setActiveSubTab] = useState<'kelurahan' | 'posyandu' | 'ringkasan' | 'rekapitulasi_tl'>('kelurahan');
 
   // Filter Evaluasi
   const [evalTahun, setEvalTahun] = useState<string>('2026');
   const [evalBulan, setEvalBulan] = useState<string>('ALL');
   const [evalKelurahanFilter, setEvalKelurahanFilter] = useState<string>('ALL');
   const [searchPosyanduQuery, setSearchPosyanduQuery] = useState<string>('');
+
+  // Filter Rekapitulasi & Status Tindak Lanjut
+  const [filterTindakLanjutStatus, setFilterTindakLanjutStatus] = useState<'ALL' | 'SUDAH' | 'BELUM'>('ALL');
+  const [rekapFilterStatus, setRekapFilterStatus] = useState<string>('ALL');
+  const [rekapFilterKelurahan, setRekapFilterKelurahan] = useState<string>('ALL');
+  const [rekapSearch, setRekapSearch] = useState<string>('');
+
+  // Modal Popup Pratinjau Foto Bukti Tindak Lanjut
+  const [photoPreviewModal, setPhotoPreviewModal] = useState<{
+    isOpen: boolean;
+    url: string;
+    title: string;
+    namaUnit?: string;
+    namaPetugas?: string;
+    tanggal?: string;
+    keterangan?: string;
+  } | null>(null);
+
+  const allSasaran = useMemo(() => storageService.getSasaranList(), []);
+  const allUsers = useMemo(() => storageService.getUsers(), []);
 
   const [catatanEvaluasi, setCatatanEvaluasi] = useState(
     'Berdasarkan evaluasi terpadu Puskesmas Kepulauan Seribu Selatan periode berjalan, intervensi PMT pangan lokal ikan laut berprotein tinggi terbukti efektif meningkatkan berat badan pada 69,0% balita bermasalah gizi. Tingkat kepatuhan kunjungan kader dan nakes mencapai 85,6%. Disarankan memperkuat armada operasional kapal laut pada musim angin barat agar distribusi formula F-75/F-100 tetap tepat waktu.'
@@ -85,6 +109,116 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
       );
     });
   }, [evalKelurahanFilter, evalBulan, evalTahun, searchPosyanduQuery]);
+
+  // Rekapitulasi Data Gizi & Filter Tindak Lanjut (Sudah vs Belum)
+  const rawTLAll = useMemo(() => {
+    return storageService.getTindakLanjutList({ pulau_id: 'ALL', tahun: 'ALL', bulan: 'ALL' });
+  }, []);
+
+  const totalKasusGiziCount = rawTLAll.length;
+  const sudahDitindaklanjutiCount = rawTLAll.filter(tl => 
+    (tl.tindak_lanjut_lintas_sektor && tl.tindak_lanjut_lintas_sektor.length > 0) || tl.status === 'Selesai'
+  ).length;
+  const belumDitindaklanjutiCount = totalKasusGiziCount - sudahDitindaklanjutiCount;
+
+  // Data Terfilter berdasarkan status tindak lanjut (Semua / Sudah / Belum)
+  const rekapitulasiTindakLanjutData = useMemo(() => {
+    return rawTLAll.filter(tl => {
+      const s = allSasaran.find(item => item.sasaran_id === tl.sasaran_id);
+      const hasAction = (tl.tindak_lanjut_lintas_sektor && tl.tindak_lanjut_lintas_sektor.length > 0) || tl.status === 'Selesai';
+      
+      // Filter Utama: Sudah vs Belum Ditindaklanjuti
+      if (filterTindakLanjutStatus === 'SUDAH' && !hasAction) return false;
+      if (filterTindakLanjutStatus === 'BELUM' && hasAction) return false;
+
+      // Filter status umum (Selesai vs Dalam proses)
+      if (rekapFilterStatus === 'Selesai' && tl.status !== 'Selesai') return false;
+      if (rekapFilterStatus === 'Dalam proses' && tl.status !== 'Dalam proses') return false;
+      
+      // Filter kelurahan
+      if (rekapFilterKelurahan !== 'ALL') {
+        if (s) {
+          if (rekapFilterKelurahan === 'KEL-01' && s.pulau_id !== 'PULAU-01') return false;
+          if (rekapFilterKelurahan === 'KEL-02' && s.pulau_id !== 'PULAU-02' && s.pulau_id !== 'PULAU-03') return false;
+          if (rekapFilterKelurahan === 'KEL-03' && s.pulau_id !== 'PULAU-04') return false;
+        }
+      }
+
+      // Filter search
+      if (rekapSearch) {
+        const q = rekapSearch.toLowerCase();
+        const matchCode = s?.kode_sasaran.toLowerCase().includes(q) || false;
+        const matchName = s?.inisial.toLowerCase().includes(q) || false;
+        const matchCat = tl.kategori.toLowerCase().includes(q);
+        const matchPos = tl.posyandu_nama?.toLowerCase().includes(q) || false;
+        const matchAksi = tl.tindak_lanjut_lintas_sektor?.some(a => 
+          a.nama_unit.toLowerCase().includes(q) || a.aksi_intervensi.toLowerCase().includes(q)
+        ) || false;
+
+        if (!matchCode && !matchName && !matchCat && !matchPos && !matchAksi) return false;
+      }
+
+      return true;
+    });
+  }, [rawTLAll, allSasaran, filterTindakLanjutStatus, rekapFilterStatus, rekapFilterKelurahan, rekapSearch]);
+
+  const rekapSummary = useMemo(() => {
+    const total = rekapitulasiTindakLanjutData.length;
+    const selesai = rekapitulasiTindakLanjutData.filter(t => t.status === 'Selesai').length;
+    const proses = rekapitulasiTindakLanjutData.filter(t => t.status !== 'Selesai').length;
+    const sudah = rekapitulasiTindakLanjutData.filter(t => 
+      (t.tindak_lanjut_lintas_sektor && t.tindak_lanjut_lintas_sektor.length > 0) || t.status === 'Selesai'
+    ).length;
+    const belum = total - sudah;
+    const rate = total > 0 ? Math.round((selesai / total) * 100) : 0;
+    
+    let totalAksiSektor = 0;
+    rekapitulasiTindakLanjutData.forEach(t => {
+      totalAksiSektor += (t.tindak_lanjut_lintas_sektor?.length || 0);
+    });
+
+    return { total, selesai, proses, sudah, belum, rate, totalAksiSektor };
+  }, [rekapitulasiTindakLanjutData]);
+
+  // Handler Export CSV Rekapitulasi Tindak Lanjut
+  const handleExportRekapitulasiCSV = () => {
+    const headers = [
+      'No',
+      'ID Tindak Lanjut',
+      'Kode Balita',
+      'Nama Inisial',
+      'Wilayah Pulau',
+      'Posyandu',
+      'Kategori Masalah Gizi',
+      'Rencana Intervensi',
+      'Total Aksi Sektor',
+      'Unit yang Menindaklanjuti',
+      'Tenggat',
+      'Tanggal Selesai',
+      'Status Kasus'
+    ];
+    const rows = rekapitulasiTindakLanjutData.map((tl, i) => {
+      const s = allSasaran.find(item => item.sasaran_id === tl.sasaran_id);
+      const p = pulauList.find(item => item.pulau_id === s?.pulau_id);
+      const units = tl.tindak_lanjut_lintas_sektor?.map(u => `${u.nama_unit} (${u.status_hasil})`).join('; ') || '-';
+      return [
+        i + 1,
+        tl.tindak_lanjut_id,
+        s?.kode_sasaran || tl.sasaran_id,
+        s?.inisial || '-',
+        p?.nama_pulau || 'Kepulauan Seribu Selatan',
+        tl.posyandu_nama || '-',
+        s?.kategori_masalah_terakhir || tl.kategori,
+        tl.rencana_intervensi,
+        tl.tindak_lanjut_lintas_sektor?.length || 0,
+        units,
+        tl.tenggat,
+        tl.tanggal_selesai || '-',
+        tl.status
+      ];
+    });
+    exportToCSV(`Rekapitulasi_Tindak_Lanjut_Gizi_${evalTahun}`, headers, rows);
+  };
 
   // Data Ringkasan Terpadu KPI
   const stats = storageService.getDashboardStats(filter);
@@ -260,8 +394,13 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
           </button>
 
           <button
-            onClick={activeSubTab === 'kelurahan' ? handleExportKelurahanCSV : handleExportPosyanduCSV}
-            className="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs"
+            onClick={() => {
+              if (activeSubTab === 'kelurahan') handleExportKelurahanCSV();
+              else if (activeSubTab === 'posyandu') handleExportPosyanduCSV();
+              else if (activeSubTab === 'rekapitulasi_tl') handleExportRekapitulasiCSV();
+              else handleExportKelurahanCSV();
+            }}
+            className="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
           >
             <Download className="w-4 h-4" />
             <span>Ekspor CSV</span>
@@ -271,10 +410,10 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
 
       {/* Main Sub Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-2 text-xs font-semibold">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setActiveSubTab('kelurahan')}
-            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 ${
+            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
               activeSubTab === 'kelurahan'
                 ? 'bg-sky-600 text-white shadow-xs font-bold'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -286,7 +425,7 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
 
           <button
             onClick={() => setActiveSubTab('posyandu')}
-            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 ${
+            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
               activeSubTab === 'posyandu'
                 ? 'bg-sky-600 text-white shadow-xs font-bold'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -297,8 +436,20 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveSubTab('rekapitulasi_tl')}
+            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
+              activeSubTab === 'rekapitulasi_tl'
+                ? 'bg-sky-600 text-white shadow-xs font-bold'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <HeartHandshake className="w-4 h-4" />
+            <span>Data Gizi Bermasalah & Status Tindak Lanjut</span>
+          </button>
+
+          <button
             onClick={() => setActiveSubTab('ringkasan')}
-            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 ${
+            className={`px-4 py-2 rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
               activeSubTab === 'ringkasan'
                 ? 'bg-sky-600 text-white shadow-xs font-bold'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -731,6 +882,401 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
         </div>
       )}
 
+      {/* SUB-TAB 3: DATA GIZI BERMASALAH & STATUS TINDAK LANJUT */}
+      {activeSubTab === 'rekapitulasi_tl' && (
+        <div className="space-y-6">
+
+          {/* Baris Tombol Filter Utama: Sudah vs Belum Ditindaklanjuti */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 mr-1 flex items-center gap-1.5">
+                <Filter className="w-3.5 h-3.5 text-sky-600" />
+                <span>Filter Tindak Lanjut:</span>
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setFilterTindakLanjutStatus('ALL')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  filterTindakLanjutStatus === 'ALL'
+                    ? 'bg-sky-600 text-white shadow-xs'
+                    : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <span>Semua Data Gizi</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${filterTindakLanjutStatus === 'ALL' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'}`}>
+                  {totalKasusGiziCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFilterTindakLanjutStatus('SUDAH')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  filterTindakLanjutStatus === 'SUDAH'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <CheckCircle2 className={`w-3.5 h-3.5 ${filterTindakLanjutStatus === 'SUDAH' ? 'text-white' : 'text-emerald-500'}`} />
+                <span>Sudah Ditindaklanjuti</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${filterTindakLanjutStatus === 'SUDAH' ? 'bg-white/20 text-white' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300'}`}>
+                  {sudahDitindaklanjutiCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFilterTindakLanjutStatus('BELUM')}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  filterTindakLanjutStatus === 'BELUM'
+                    ? 'bg-rose-600 text-white shadow-xs animate-none'
+                    : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <AlertTriangle className={`w-3.5 h-3.5 ${filterTindakLanjutStatus === 'BELUM' ? 'text-white' : 'text-rose-500'}`} />
+                <span>Belum Ditindaklanjuti</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${filterTindakLanjutStatus === 'BELUM' ? 'bg-white/20 text-white' : 'bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300'}`}>
+                  {belumDitindaklanjutiCount}
+                </span>
+              </button>
+            </div>
+
+            <div className="text-[11px] text-slate-500">
+              Menampilkan <strong>{rekapSummary.total}</strong> dari <strong>{totalKasusGiziCount}</strong> kasus gizi
+            </div>
+          </div>
+
+          {/* Metric Cards Rekapitulasi & Status Tindak Lanjut */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
+                <span className="text-xs font-medium">Total Kasus Terfilter</span>
+                <HeartHandshake className="w-4 h-4 text-sky-600" />
+              </div>
+              <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                {rekapSummary.total}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-1">Balita bermasalah gizi</div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900/60 rounded-2xl p-4 shadow-xs bg-emerald-50/20">
+              <div className="flex items-center justify-between text-emerald-700 dark:text-emerald-400 mb-1">
+                <span className="text-xs font-semibold">Sudah Ditindaklanjuti</span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div className="text-2xl font-black text-emerald-700 dark:text-emerald-300 font-mono">
+                {sudahDitindaklanjutiCount}
+              </div>
+              <div className="text-[10px] text-emerald-600 font-semibold mt-1">
+                {totalKasusGiziCount > 0 ? `${Math.round((sudahDitindaklanjutiCount / totalKasusGiziCount) * 100)}% dari total kasus` : '0%'}
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/60 rounded-2xl p-4 shadow-xs bg-rose-50/20">
+              <div className="flex items-center justify-between text-rose-700 dark:text-rose-400 mb-1">
+                <span className="text-xs font-semibold">Belum Ditindaklanjuti</span>
+                <AlertTriangle className="w-4 h-4 text-rose-600" />
+              </div>
+              <div className="text-2xl font-black text-rose-700 dark:text-rose-300 font-mono">
+                {belumDitindaklanjutiCount}
+              </div>
+              <div className="text-[10px] text-rose-600 font-semibold mt-1">Perlu respon cepat unit</div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
+                <span className="text-xs font-medium">Kasus Selesai</span>
+                <TrendingUp className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div className="text-2xl font-black text-emerald-600 font-mono">
+                {rekapSummary.selesai}
+              </div>
+              <div className="text-[10px] text-emerald-600 font-medium mt-1">Disahkan Petugas Gizi</div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs">
+              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 mb-1">
+                <span className="text-xs font-medium">Aksi Lintas Sektor</span>
+                <Building2 className="w-4 h-4 text-indigo-600" />
+              </div>
+              <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
+                {rekapSummary.totalAksiSektor}
+              </div>
+              <div className="text-[10px] text-indigo-600 mt-1">Tercatat di lapangan</div>
+            </div>
+          </div>
+
+          {/* Filter & Action Bar Rekapitulasi */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <span className="font-semibold text-slate-600 dark:text-slate-400">Status:</span>
+                <select
+                  value={rekapFilterStatus}
+                  onChange={(e) => setRekapFilterStatus(e.target.value)}
+                  className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-slate-800 dark:text-slate-200 font-medium outline-none"
+                >
+                  <option value="ALL">Semua Kasus</option>
+                  <option value="Selesai">Hanya Selesai (Tuntas)</option>
+                  <option value="Dalam proses">Dalam Proses Intervensi</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="font-semibold text-slate-600 dark:text-slate-400">Kelurahan:</span>
+                <select
+                  value={rekapFilterKelurahan}
+                  onChange={(e) => setRekapFilterKelurahan(e.target.value)}
+                  className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1.5 text-slate-800 dark:text-slate-200 font-medium outline-none"
+                >
+                  <option value="ALL">Semua Kelurahan</option>
+                  {kelurahanList.map(k => (
+                    <option key={k.kelurahan_id} value={k.kelurahan_id}>
+                      {k.nama_kelurahan}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Cari balita / posyandu / aksi..."
+                  value={rekapSearch}
+                  onChange={(e) => setRekapSearch(e.target.value)}
+                  className="pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 w-56 outline-none"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-3 py-1.5 bg-slate-900 text-white dark:bg-white dark:text-slate-900 hover:opacity-90 rounded-xl font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                title="Cetak Laporan Rekapitulasi PDF"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Cetak PDF</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportRekapitulasiCSV}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold flex items-center gap-1 shadow-xs cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Ekspor CSV</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Tabel Detail Rekapitulasi Kasus yang Sudah Ditindaklanjuti */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                  Daftar Rekapitulasi Sasaran yang Sudah Ditindaklanjuti ({rekapitulasiTindakLanjutData.length} Kasus)
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Riwayat lengkap intervensi kolaborasi lintas sektor (Kader, Kecamatan, Petugas Puskesmas, Kelurahan, PKK, TPK) beserta bukti dokumentasi.
+                </p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 font-semibold">
+                  <tr>
+                    <th className="py-3 px-3 text-center">No</th>
+                    <th className="py-3 px-3">Kode & Balita</th>
+                    <th className="py-3 px-3">Wilayah & Posyandu</th>
+                    <th className="py-3 px-3">Masalah Gizi Awal</th>
+                    <th className="py-3 px-3">Rencana Intervensi</th>
+                    <th className="py-3 px-3 text-center">Status Tindak Lanjut</th>
+                    <th className="py-3 px-3">Aksi Kolaborasi Lintas Sektor</th>
+                    <th className="py-3 px-3 text-center">Bukti Foto</th>
+                    <th className="py-3 px-3">Tenggat / Selesai</th>
+                    <th className="py-3 px-3 text-center">Status Kasus</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {rekapitulasiTindakLanjutData.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="py-8 text-center text-slate-400">
+                        Tidak ada data masalah gizi yang sesuai dengan filter.
+                      </td>
+                    </tr>
+                  ) : (
+                    rekapitulasiTindakLanjutData.map((tl, index) => {
+                      const s = allSasaran.find(item => item.sasaran_id === tl.sasaran_id);
+                      const p = pulauList.find(item => item.pulau_id === s?.pulau_id);
+                      const nakes = allUsers.find(u => u.user_id === tl.petugas_id);
+
+                      return (
+                        <tr key={tl.tindak_lanjut_id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                          <td className="py-3 px-3 text-center text-slate-400 font-mono text-[11px]">
+                            {index + 1}
+                          </td>
+
+                          <td className="py-3 px-3">
+                            <div className="font-bold text-slate-900 dark:text-white">
+                              {s?.kode_sasaran || tl.sasaran_id}
+                            </div>
+                            <div className="text-[11px] text-slate-500 font-medium">
+                              Inisial: {s?.inisial || '-'} ({s?.jenis_kelamin || '-'})
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-3">
+                            <div className="font-semibold text-slate-800 dark:text-slate-200">
+                              {p?.nama_pulau || 'Kepulauan Seribu Selatan'}
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              {tl.posyandu_nama || 'Posyandu Wilayah'}
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-3">
+                            <span className="font-semibold text-rose-600 dark:text-rose-400">
+                              {s?.kategori_masalah_terakhir || tl.kategori}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-3">
+                            <div className="max-w-[200px] text-[11px] text-slate-700 dark:text-slate-300">
+                              {tl.rencana_intervensi}
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-3 text-center whitespace-nowrap">
+                            {(tl.tindak_lanjut_lintas_sektor && tl.tindak_lanjut_lintas_sektor.length > 0) || tl.status === 'Selesai' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                <span>Sudah Ditindaklanjuti</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-700 animate-pulse">
+                                <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                <span>Belum Ditindaklanjuti</span>
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-3">
+                            <div className="max-w-[280px] space-y-1">
+                              {tl.tindak_lanjut_lintas_sektor && tl.tindak_lanjut_lintas_sektor.length > 0 ? (
+                                tl.tindak_lanjut_lintas_sektor.map((item, aIdx) => (
+                                  <div 
+                                    key={aIdx} 
+                                    className="p-1.5 rounded-lg border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/20 text-[10px]"
+                                  >
+                                    <div className="flex items-center justify-between font-bold text-emerald-950 dark:text-emerald-300">
+                                      <span>{item.nama_unit.split('(')[0].trim()}</span>
+                                      <span className="text-emerald-700 font-mono">{item.status_hasil}</span>
+                                    </div>
+                                    <div className="text-slate-700 dark:text-slate-300 mt-0.5 truncate" title={item.aksi_intervensi}>
+                                      • {item.aksi_intervensi}
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                <span className="text-slate-400 text-[11px] italic">Belum ada catatan aksi unit</span>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-3 text-center">
+                            {tl.foto_dokumen || (tl.tindak_lanjut_lintas_sektor?.some(a => a.foto_dokumen)) ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const photoUrl = tl.foto_dokumen || tl.tindak_lanjut_lintas_sektor?.find(a => a.foto_dokumen)?.foto_dokumen;
+                                  if (photoUrl) {
+                                    setPhotoPreviewModal({
+                                      isOpen: true,
+                                      url: photoUrl,
+                                      title: `Dokumentasi Intervensi: ${s?.inisial || tl.sasaran_id}`,
+                                      namaUnit: tl.tindak_lanjut_lintas_sektor?.[0]?.nama_unit || 'Dokumentasi Terpadu',
+                                      namaPetugas: tl.tindak_lanjut_lintas_sektor?.[0]?.nama_petugas || nakes?.nama || 'Petugas',
+                                      tanggal: tl.tanggal_selesai || tl.tanggal_rencana,
+                                      keterangan: tl.rencana_intervensi
+                                    });
+                                  }
+                                }}
+                                className="px-2.5 py-1 bg-sky-100 dark:bg-sky-950 hover:bg-sky-200 text-sky-800 dark:text-sky-300 rounded-lg text-[11px] font-bold inline-flex items-center gap-1 border border-sky-300 dark:border-sky-700 cursor-pointer shadow-2xs"
+                                title="Lihat Foto Bukti Dokumentasi"
+                              >
+                                <Camera className="w-3.5 h-3.5" />
+                                <span>Lihat Foto</span>
+                              </button>
+                            ) : (
+                              <span className="text-slate-300 dark:text-slate-600 text-[11px]">-</span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-3 font-mono text-[11px] whitespace-nowrap">
+                            <div>Tenggat: {tl.tenggat}</div>
+                            {tl.tanggal_selesai && (
+                              <div className="text-emerald-600 font-semibold mt-0.5">Selesai: {tl.tanggal_selesai}</div>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-3 text-center whitespace-nowrap">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                              tl.status === 'Selesai'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300'
+                                : 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 border border-sky-300'
+                            }`}>
+                              {tl.status === 'Selesai' ? (
+                                <>
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                  <span>Selesai (Nakes)</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Activity className="w-3 h-3 text-sky-600" />
+                                  <span>Dalam Proses</span>
+                                </>
+                              )}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Lembar Tanda Tangan Cetak Resmi (Muncul saat print PDF) */}
+            <div className="p-6 border-t border-slate-200 dark:border-slate-800 print:block mt-4 text-xs">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-6 pt-4 text-center">
+                <div className="space-y-1">
+                  <p className="text-slate-500">Mengetahui,</p>
+                  <p className="font-bold text-slate-800 dark:text-slate-200">Kepala Puskesmas Kec. Kepulauan Seribu Selatan</p>
+                  <div className="h-16"></div>
+                  <p className="font-bold underline text-slate-900 dark:text-white">dr. Ahmad Faisal, M.K.M</p>
+                  <p className="text-slate-500 text-[11px]">NIP. 198205142008011005</p>
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-slate-500">Kepulauan Seribu Selatan, {new Date().toLocaleDateString('id-ID')}</p>
+                  <p className="font-bold text-slate-800 dark:text-slate-200">Penanggung Jawab Program Gizi & KIA</p>
+                  <div className="h-16"></div>
+                  <p className="font-bold underline text-slate-900 dark:text-white">Siti Rahmawati, S.Gz</p>
+                  <p className="text-slate-500 text-[11px]">NIP. 199108202015022003</p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
       {/* TAB 3: RINGKASAN INDIKATOR TERPADU (ORIGINAL VIEW ENHANCED) */}
       {activeSubTab === 'ringkasan' && (
         <div className="space-y-6">
@@ -800,6 +1346,55 @@ export const LaporanView: React.FC<LaporanViewProps> = ({
             </div>
           </div>
 
+        </div>
+      )}
+
+      {/* POPUP MODAL PREVIEW FOTO DOKUMENTASI BUKTI INTERVENSI */}
+      {photoPreviewModal && photoPreviewModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-3xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                  {photoPreviewModal.title}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {photoPreviewModal.namaUnit} • {photoPreviewModal.namaPetugas} • {photoPreviewModal.tanggal}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPhotoPreviewModal(null)}
+                className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="relative rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-950 flex items-center justify-center max-h-[60vh] border border-slate-200 dark:border-slate-800">
+              <img 
+                src={photoPreviewModal.url} 
+                alt={photoPreviewModal.title} 
+                className="max-h-[60vh] w-auto max-w-full object-contain"
+              />
+            </div>
+
+            {photoPreviewModal.keterangan && (
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl text-xs text-slate-700 dark:text-slate-300">
+                <strong>Uraian Kegiatan / Evaluasi:</strong> {photoPreviewModal.keterangan}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setPhotoPreviewModal(null)}
+                className="px-5 py-2 bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-semibold rounded-xl text-xs hover:opacity-90 cursor-pointer"
+              >
+                Tutup Pratinjau
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

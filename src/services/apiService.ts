@@ -163,6 +163,33 @@ class ApiService {
   }
 
   /**
+   * Membersihkan seluruh data baris demo dari Google Spreadsheet (hanya sisakan header)
+   */
+  public async clearAllDatabaseRows(url?: string): Promise<ApiResponse> {
+    const targetUrl = (url || this.getBaseUrl()).trim();
+    if (!targetUrl) {
+      return {
+        success: false,
+        message: 'URL Web App belum diisi. Masukkan URL Web App Google Apps Script terlebih dahulu.',
+        data: null
+      };
+    }
+
+    try {
+      const endpoint = `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}action=clearAllData&_t=${Date.now()}`;
+      const res = await fetch(endpoint, { method: 'GET' });
+      const json = await res.json();
+      return json;
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `Gagal membersihkan data baris spreadsheet: ${err.message}`,
+        data: null
+      };
+    }
+  }
+
+  /**
    * Menguji Pengiriman Pesan WhatsApp melalui Gateway Google Apps Script
    */
   public async testWhatsAppApi(phone: string, url?: string): Promise<ApiResponse> {
@@ -266,6 +293,50 @@ class ApiService {
       }
     }
     return saved;
+  }
+
+  public async deleteSasaran(id: string): Promise<boolean> {
+    const success = storageService.deleteSasaran(id);
+    if (this.isConnected()) {
+      try {
+        await fetch(this.getBaseUrl(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'deleteSasaran',
+            data: { sasaran_id: id },
+            user: storageService.getCurrentUser()
+          }),
+          mode: 'no-cors'
+        });
+        setTimeout(() => this.fetchDatabaseData(), 500);
+      } catch (e) {
+        console.warn('Gagal sinkronisasi hapus ke Google Apps Script:', e);
+      }
+    }
+    return success;
+  }
+
+  public async importSasaranBatch(items: Partial<SasaranBalita>[]): Promise<{ count: number; imported: SasaranBalita[] }> {
+    const result = storageService.importSasaranBatch(items);
+    if (this.isConnected()) {
+      try {
+        await fetch(this.getBaseUrl(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'importSasaranBatch',
+            data: result.imported,
+            user: storageService.getCurrentUser()
+          }),
+          mode: 'no-cors'
+        });
+        setTimeout(() => this.fetchDatabaseData(), 500);
+      } catch (e) {
+        console.warn('Gagal sinkronisasi import batch ke Google Apps Script:', e);
+      }
+    }
+    return result;
   }
 
   // --- CRUD Tindak Lanjut ---

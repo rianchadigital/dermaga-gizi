@@ -44,22 +44,26 @@ export const MasterPosyanduView: React.FC<MasterPosyanduViewProps> = ({
   const [isKelurahanModalOpen, setIsKelurahanModalOpen] = useState(false);
   const [editingKelurahan, setEditingKelurahan] = useState<Partial<Kelurahan>>({});
 
-  const canManage = currentUser.role === 'ADMIN' || currentUser.role === 'TENAGA_GIZI' || currentUser.role === 'KEPALA_PUSKESMAS';
+  const canManage = currentUser?.role === 'ADMIN' || currentUser?.role === 'TENAGA_GIZI' || currentUser?.role === 'KEPALA_PUSKESMAS';
 
   // Filtered Posyandu list
-  const filteredPosyandu = posyanduList.filter(p => {
+  const safePosyanduList = Array.isArray(posyanduList) ? posyanduList : [];
+  const safeKelurahanList = Array.isArray(kelurahanList) ? kelurahanList : [];
+
+  const filteredPosyandu = safePosyanduList.filter(p => {
+    if (!p) return false;
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
-      p.nama_posyandu.toLowerCase().includes(q) ||
-      p.ketua_kader.toLowerCase().includes(q) ||
-      p.rw.toLowerCase().includes(q) ||
-      p.pulau_nama.toLowerCase().includes(q)
+      (p.nama_posyandu || '').toLowerCase().includes(q) ||
+      (p.ketua_kader || '').toLowerCase().includes(q) ||
+      (p.rw || '').toLowerCase().includes(q) ||
+      (p.pulau_nama || '').toLowerCase().includes(q)
     );
   });
 
-  const totalSasaranAll = posyanduList.reduce((acc, p) => acc + p.total_sasaran, 0);
-  const totalKaderAll = posyanduList.reduce((acc, p) => acc + p.jumlah_kader, 0);
+  const totalSasaranAll = safePosyanduList.reduce((acc, p) => acc + (p?.total_sasaran || 0), 0);
+  const totalKaderAll = safePosyanduList.reduce((acc, p) => acc + (p?.jumlah_kader || 0), 0);
 
   // Handlers Posyandu
   const handleOpenAddPosyandu = () => {
@@ -222,7 +226,7 @@ export const MasterPosyanduView: React.FC<MasterPosyanduViewProps> = ({
               >
                 Semua ({storageService.getPosyanduList().length})
               </button>
-              {kelurahanList.map(k => (
+              {safeKelurahanList.map(k => (
                 <button
                   key={k.kelurahan_id}
                   onClick={() => setFilterKelurahan(k.kelurahan_id)}
@@ -232,7 +236,7 @@ export const MasterPosyanduView: React.FC<MasterPosyanduViewProps> = ({
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
                   }`}
                 >
-                  {k.nama_kelurahan.replace('Kelurahan ', '')}
+                  {(k.nama_kelurahan || '').replace('Kelurahan ', '')}
                 </button>
               ))}
             </div>
@@ -267,7 +271,9 @@ export const MasterPosyanduView: React.FC<MasterPosyanduViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
-                  {filteredPosyandu.map((pos) => (
+                  {filteredPosyandu.map((pos) => {
+                    const waClean = (pos.no_wa_kader || '').replace(/\D/g, '');
+                    return (
                     <tr key={pos.posyandu_id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="py-3 px-4">
                         <div className="font-bold text-slate-900 dark:text-slate-100">{pos.nama_posyandu}</div>
@@ -290,13 +296,13 @@ export const MasterPosyanduView: React.FC<MasterPosyanduViewProps> = ({
                       <td className="py-3 px-4">
                         <div className="font-semibold text-slate-900 dark:text-slate-100">{pos.ketua_kader}</div>
                         <a 
-                          href={`https://wa.me/${pos.no_wa_kader.replace(/\D/g, '')}?text=Halo%20${encodeURIComponent(pos.ketua_kader)}%20(Posyandu%20${encodeURIComponent(pos.nama_posyandu)}),%20mohon%20informasi%20terkait%20kegiatan%20gizi`}
+                          href={`https://wa.me/${waClean}?text=Halo%20${encodeURIComponent(pos.ketua_kader || '')}%20(Posyandu%20${encodeURIComponent(pos.nama_posyandu || '')}),%20mohon%20informasi%20terkait%20kegiatan%20gizi`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 mt-0.5 font-mono"
                         >
                           <MessageCircle className="w-3 h-3 text-emerald-500" />
-                          <span>{pos.no_wa_kader}</span>
+                          <span>{pos.no_wa_kader || '-'}</span>
                         </a>
                       </td>
 
@@ -346,7 +352,8 @@ export const MasterPosyanduView: React.FC<MasterPosyanduViewProps> = ({
                         </td>
                       )}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -357,9 +364,11 @@ export const MasterPosyanduView: React.FC<MasterPosyanduViewProps> = ({
       {/* TAB 2: DATA KELURAHAN */}
       {activeTab === 'kelurahan' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {kelurahanList.map((kel) => {
-            const posyanduInKel = storageService.getPosyanduList(kel.kelurahan_id);
-            const totalSasaran = posyanduInKel.reduce((acc, p) => acc + p.total_sasaran, 0);
+          {safeKelurahanList.map((kel) => {
+            const posyanduInKel = storageService.getPosyanduList(kel?.kelurahan_id) || [];
+            const totalSasaran = posyanduInKel.reduce((acc, p) => acc + (p?.total_sasaran || 0), 0);
+            const lurahWaClean = (kel?.no_wa_lurah || '').replace(/\D/g, '');
+            const safeDaftarPulau = Array.isArray(kel?.daftar_pulau) ? kel.daftar_pulau : [];
 
             return (
               <div 
@@ -396,13 +405,13 @@ export const MasterPosyanduView: React.FC<MasterPosyanduViewProps> = ({
                     <div className="text-[11px] text-slate-500 font-medium">Pimpinan Kelurahan (Lurah):</div>
                     <div className="font-bold text-slate-800 dark:text-slate-200">{kel.lurah_nama}</div>
                     <a
-                      href={`https://wa.me/${kel.no_wa_lurah.replace(/\D/g, '')}?text=Yth.%20Bapak%20Lurah%20${encodeURIComponent(kel.nama_kelurahan)},%20mohon%20koordinasi%20terkait%20monitoring%20gizi%20balita`}
+                      href={`https://wa.me/${lurahWaClean}?text=Yth.%20Bapak%20Lurah%20${encodeURIComponent(kel.nama_kelurahan || '')},%20mohon%20koordinasi%20terkait%20monitoring%20gizi%20balita`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 font-mono pt-0.5"
                     >
                       <MessageCircle className="w-3.5 h-3.5" />
-                      <span>{kel.no_wa_lurah} (WhatsApp Aktif)</span>
+                      <span>{kel.no_wa_lurah || '-'} (WhatsApp Aktif)</span>
                     </a>
                   </div>
 
@@ -410,7 +419,7 @@ export const MasterPosyanduView: React.FC<MasterPosyanduViewProps> = ({
                   <div className="text-xs space-y-1">
                     <span className="text-[11px] text-slate-500 font-medium">Pulau Wilayah Naungan:</span>
                     <div className="flex flex-wrap gap-1.5">
-                      {kel.daftar_pulau.map((p, idx) => (
+                      {safeDaftarPulau.map((p, idx) => (
                         <span key={idx} className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px]">
                           {p}
                         </span>

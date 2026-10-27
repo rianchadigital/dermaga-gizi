@@ -97,6 +97,54 @@ export const INITIAL_USERS: User[] = [
     status_aktif: true,
     created_at: '15/01/2026',
     updated_at: '15/01/2026'
+  },
+  {
+    user_id: 'USR-008',
+    email: 'dishub.seribu@dishub.jakarta.go.id',
+    nama: 'Hendra Wijaya, S.ST (Dishub Laut)',
+    no_wa: '6281234567890',
+    role: 'LINTAS_SEKTOR',
+    unit: 'Dinas Perhubungan (UP Angkutan Perairan & Ambulans Laut)',
+    pulau_id: 'ALL',
+    status_aktif: true,
+    created_at: '15/01/2026',
+    updated_at: '15/01/2026'
+  },
+  {
+    user_id: 'USR-009',
+    email: 'pkk.seribuselatan@jakarta.go.id',
+    nama: 'Hj. Endang Rahmawati (TP PKK)',
+    no_wa: '6281299332211',
+    role: 'LINTAS_SEKTOR',
+    unit: 'Tim Penggerak PKK & Pokja IV (Dasawisma)',
+    pulau_id: 'ALL',
+    status_aktif: true,
+    created_at: '15/01/2026',
+    updated_at: '15/01/2026'
+  },
+  {
+    user_id: 'USR-010',
+    email: 'satpolpp.seribuselatan@jakarta.go.id',
+    nama: 'Bambang Sutrisno, S.Sos (Satpol PP)',
+    no_wa: '6281399887766',
+    role: 'LINTAS_SEKTOR',
+    unit: 'Satpol PP Kecamatan Kepulauan Seribu Selatan',
+    pulau_id: 'ALL',
+    status_aktif: true,
+    created_at: '15/01/2026',
+    updated_at: '15/01/2026'
+  },
+  {
+    user_id: 'USR-011',
+    email: 'dinsos.seribuselatan@jakarta.go.id',
+    nama: 'Dra. Ratna Dewi (Sudin Sosial)',
+    no_wa: '6281211223388',
+    role: 'LINTAS_SEKTOR',
+    unit: 'Suku Dinas Sosial (Bansos Pangan Darurat Balita)',
+    pulau_id: 'ALL',
+    status_aktif: true,
+    created_at: '15/01/2026',
+    updated_at: '15/01/2026'
   }
 ];
 
