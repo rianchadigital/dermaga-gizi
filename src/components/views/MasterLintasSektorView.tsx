@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { UserLintasSektor, User, Kelurahan } from '../../types';
 import { storageService } from '../../services/storageService';
+import { apiService } from '../../services/apiService';
 
 interface MasterLintasSektorViewProps {
   currentUser: User;
@@ -100,7 +101,7 @@ export const MasterLintasSektorView: React.FC<MasterLintasSektorViewProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser.nama || !editingUser.no_wa) return;
 
@@ -116,20 +117,20 @@ export const MasterLintasSektorView: React.FC<MasterLintasSektorViewProps> = ({
       no_wa: editingUser.no_wa.replace(/\s+/g, '')
     };
 
-    storageService.saveUserLintasSektor(payload);
+    await apiService.saveUserLintasSektor(payload);
     setIsModalOpen(false);
     onRefreshData();
   };
 
-  const handleDelete = (id: string, nama: string) => {
+  const handleDelete = async (id: string, nama: string) => {
     if (window.confirm(`Yakin ingin menghapus kontak lintas sektor "${nama}"?`)) {
-      storageService.deleteUserLintasSektor(id);
+      await apiService.deleteUserLintasSektor(id);
       onRefreshData();
     }
   };
 
-  const handleToggleNotifWa = (u: UserLintasSektor) => {
-    storageService.saveUserLintasSektor({
+  const handleToggleNotifWa = async (u: UserLintasSektor) => {
+    await apiService.saveUserLintasSektor({
       ...u,
       status_notifikasi_wa: !u.status_notifikasi_wa
     });

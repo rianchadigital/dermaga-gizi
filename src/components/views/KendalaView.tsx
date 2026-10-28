@@ -234,9 +234,9 @@ export const KendalaView: React.FC<KendalaViewProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleDeleteKendala = (id: string) => {
+  const handleDeleteKendala = async (id: string) => {
     if (confirm('Apakah Anda yakin ingin menghapus data kendala ini?')) {
-      storageService.deleteKendala(id);
+      await apiService.deleteKendala(id);
       showToast('Data kendala berhasil dihapus.');
       onRefreshData();
     }

@@ -116,10 +116,24 @@ export default function App() {
     setRefreshKey(prev => prev + 1);
   }, []);
 
+  // Inisialisasi awal: bersihkan data dummy browser & sinkronkan seketika dengan database Google Apps Script
+  useEffect(() => {
+    storageService.cleanDummyData();
+    setIsSyncing(true);
+    apiService.fetchDatabaseData()
+      .then(changed => {
+        if (changed) {
+          handleRefreshData();
+        }
+      })
+      .finally(() => {
+        setIsSyncing(false);
+      });
+  }, [handleRefreshData]);
+
   // Live Auto-Refresh Polling Interval jika tersambung dengan Remote / Cloud Database
   useEffect(() => {
     if (!autoRefresh) return;
-    // Jangan polling loop render jika di mode lokal agar modal dan form tidak hilang
     if (!apiService.isConnected()) return;
 
     const interval = setInterval(async () => {

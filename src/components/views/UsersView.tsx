@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { User, Role } from '../../types';
 import { storageService } from '../../services/storageService';
+import { apiService } from '../../services/apiService';
 
 interface UsersViewProps {
   users: User[];
@@ -59,11 +60,11 @@ export const UsersView: React.FC<UsersViewProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeUser.nama || !activeUser.email) return;
 
-    storageService.saveUser(activeUser as User);
+    await apiService.saveUser(activeUser as User);
     setIsModalOpen(false);
     onRefreshData();
   };

@@ -79,7 +79,7 @@ var HEADERS = {
     'user_id', 'nama', 'jabatan', 'instansi_sektor', 'kelurahan_id', 'kelurahan_nama', 'no_wa', 'email', 'status_notifikasi_wa', 'status_aktif'
   ],
   SASARAN: [
-    'sasaran_id', 'kode_sasaran', 'inisial', 'tanggal_lahir', 'jenis_kelamin', 'pulau_id', 'unit_pelayanan', 'tanggal_registrasi', 'status_aktif', 'kategori_masalah_terakhir', 'bb_terakhir', 'tb_terakhir', 'tanggal_pantau_terakhir'
+    'sasaran_id', 'kode_sasaran', 'inisial', 'nik', 'jenis_kelamin', 'tanggal_lahir', 'usia', 'tanggal_ukur', 'cara_ukur', 'bb_terakhir', 'tb_terakhir', 'zscore_bbtb', 'status_gizi_bbtb', 'zscore_tbu', 'status_gizi_tbu', 'zscore_bbu', 'status_gizi_bbu', 'naik_berat_badan', 'keterangan_naik_bb', 'status_outlier_who', 'nama_ortu', 'no_hp', 'wilayah_kecamatan', 'kelurahan_nama', 'puskesmas_pustu', 'posyandu', 'pulau_id', 'unit_pelayanan', 'tanggal_registrasi', 'status_aktif', 'kategori_masalah_terakhir', 'tanggal_pantau_terakhir'
   ],
   PEMANTAUAN: [
     'pemantauan_id', 'sasaran_id', 'tanggal_pemantauan', 'petugas_id', 'indikator_terukur', 'kategori_masalah', 'hasil_pemeriksaan', 'catatan_terbatas', 'periode', 'created_at'
@@ -702,10 +702,25 @@ function doPost(e) {
     // CRUD Kendala
     if (action === 'createKendala') return handleCreateRecord(SHEETS.KENDALA, HEADERS.KENDALA, data, 'KENDALA', currentUser);
     if (action === 'updateKendala') return handleUpdateRecord(SHEETS.KENDALA, 'kendala_id', data.kendala_id, data, 'KENDALA', currentUser);
+    if (action === 'deleteKendala') return handleDeleteRecord(SHEETS.KENDALA, 'kendala_id', data.kendala_id, 'KENDALA', currentUser);
 
     // CRUD Lintas Sektor
     if (action === 'createLintasSektor') return handleCreateRecord(SHEETS.LINTAS_SEKTOR, HEADERS.LINTAS_SEKTOR, data, 'LINTAS_SEKTOR', currentUser);
     if (action === 'updateLintasSektor') return handleUpdateRecord(SHEETS.LINTAS_SEKTOR, 'kegiatan_id', data.kegiatan_id, data, 'LINTAS_SEKTOR', currentUser);
+    if (action === 'deleteLintasSektor') return handleDeleteRecord(SHEETS.LINTAS_SEKTOR, 'kegiatan_id', data.kegiatan_id, 'LINTAS_SEKTOR', currentUser);
+
+    // Batch Import Sasaran Balita
+    if (action === 'importSasaranBatch') {
+      var items = Array.isArray(data) ? data : (data.items || []);
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sasaranSheet = ss.getSheetByName(SHEETS.SASARAN);
+      if (sasaranSheet && items.length > 0) {
+        for (var i = 0; i < items.length; i++) {
+          handleUpdateRecord(SHEETS.SASARAN, 'sasaran_id', items[i].sasaran_id, items[i], 'SASARAN', currentUser);
+        }
+      }
+      return jsonResponse(true, items.length + ' data sasaran berhasil diimpor.', { count: items.length });
+    }
 
     // Simpan Konfigurasi
     if (action === 'saveConfig') {

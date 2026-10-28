@@ -390,12 +390,12 @@ export const TindakLanjutView: React.FC<TindakLanjutViewProps> = ({
     }
   };
 
-  const handleSaveAksiLintasSektor = (e: React.FormEvent) => {
+  const handleSaveAksiLintasSektor = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTLForAksi) return;
 
     try {
-      const result = storageService.addTindakLanjutLintasSektor(
+      const result = await apiService.addTindakLanjutLintasSektor(
         selectedTLForAksi.tindak_lanjut_id,
         {
           unit_sektor: formAksiLintasSektor.unit_sektor,

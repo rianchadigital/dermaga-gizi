@@ -56,6 +56,7 @@ const STORAGE_KEYS = {
 
 class StorageService {
   constructor() {
+    this.cleanDummyData();
     this.initIfEmpty();
     this.cleanUpOldBokor();
   }
@@ -201,19 +202,54 @@ class StorageService {
   public getSafeArray<T>(key: string, fallback: T[]): T[] {
     try {
       const raw = localStorage.getItem(key);
-      if (!raw || raw === 'null' || raw === 'undefined' || raw === '[]') {
+      if (raw === null || raw === undefined || raw === 'null' || raw === 'undefined') {
+        const isOperational = [
+          STORAGE_KEYS.SASARAN, 
+          STORAGE_KEYS.TINDAK_LANJUT, 
+          STORAGE_KEYS.KENDALA, 
+          STORAGE_KEYS.LINTAS_SEKTOR, 
+          STORAGE_KEYS.LAPORAN_POSYANDU
+        ].includes(key);
+
+        if (isOperational) {
+          localStorage.setItem(key, JSON.stringify([]));
+          return [];
+        }
         localStorage.setItem(key, JSON.stringify(fallback));
         return [...fallback];
       }
       const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed) || parsed.length === 0) {
-        localStorage.setItem(key, JSON.stringify(fallback));
-        return [...fallback];
+      if (Array.isArray(parsed)) {
+        return parsed;
       }
-      return parsed;
+      return [];
     } catch (e) {
-      localStorage.setItem(key, JSON.stringify(fallback));
-      return [...fallback];
+      return [];
+    }
+  }
+
+  public cleanDummyData(force: boolean = false) {
+    try {
+      const rawS = localStorage.getItem(STORAGE_KEYS.SASARAN);
+      const isCleaned = localStorage.getItem('dermaga_dummy_cleaned_v2') === 'true';
+      const containsDummy = rawS && (
+        rawS.includes('An. AR') || 
+        rawS.includes('SAS-001') || 
+        rawS.includes('BLT-TDG-042')
+      );
+
+      if (!isCleaned || containsDummy || force) {
+        localStorage.setItem(STORAGE_KEYS.SASARAN, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEYS.TINDAK_LANJUT, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEYS.KENDALA, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEYS.LINTAS_SEKTOR, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEYS.LAPORAN_POSYANDU, JSON.stringify([]));
+        localStorage.setItem(STORAGE_KEYS.GAS_URL, 'https://script.google.com/macros/s/AKfycbws8A6yMS1C7rCCs5afT0skv53UzH3qBpxrWwUvHmoyRQK0MDu9MmbJDpkEMHEmeQKt/exec');
+        localStorage.setItem('dermaga_dummy_cleaned_v2', 'true');
+        this.addLog('INIT', 'SYSTEM', 'GAS-INIT', 'Pembersihan data dummy berhasil. Aplikasi fokus ke database Google Spreadsheet (GAS).', 'SUCCESS');
+      }
+    } catch (e) {
+      console.warn('Gagal membersihkan data dummy:', e);
     }
   }
 
@@ -221,7 +257,7 @@ class StorageService {
     const checkAndInit = (key: string, data: any) => {
       try {
         const val = localStorage.getItem(key);
-        if (!val || val === 'null' || val === 'undefined' || val === '[]') {
+        if (val === null || val === undefined || val === 'null' || val === 'undefined') {
           localStorage.setItem(key, JSON.stringify(data));
         }
       } catch (e) {
@@ -229,17 +265,20 @@ class StorageService {
       }
     };
 
+    // Master data dasar
     checkAndInit(STORAGE_KEYS.PULAU, INITIAL_PULAU);
     checkAndInit(STORAGE_KEYS.USERS, INITIAL_USERS);
-    checkAndInit(STORAGE_KEYS.SASARAN, INITIAL_SASARAN);
-    checkAndInit(STORAGE_KEYS.TINDAK_LANJUT, INITIAL_TINDAK_LANJUT);
-    checkAndInit(STORAGE_KEYS.KENDALA, INITIAL_KENDALA);
-    checkAndInit(STORAGE_KEYS.LINTAS_SEKTOR, INITIAL_LINTAS_SEKTOR);
-    checkAndInit(STORAGE_KEYS.LOGS, INITIAL_LOGS);
     checkAndInit(STORAGE_KEYS.KELURAHAN, INITIAL_KELURAHAN);
     checkAndInit(STORAGE_KEYS.POSYANDU, INITIAL_POSYANDU);
     checkAndInit(STORAGE_KEYS.USER_LINTAS_SEKTOR, INITIAL_USER_LINTAS_SEKTOR);
-    checkAndInit(STORAGE_KEYS.LAPORAN_POSYANDU, INITIAL_LAPORAN_POSYANDU);
+
+    // Data operasional (bersih dari dummy / kosong menunggu sinkronisasi GAS)
+    checkAndInit(STORAGE_KEYS.SASARAN, []);
+    checkAndInit(STORAGE_KEYS.TINDAK_LANJUT, []);
+    checkAndInit(STORAGE_KEYS.KENDALA, []);
+    checkAndInit(STORAGE_KEYS.LINTAS_SEKTOR, []);
+    checkAndInit(STORAGE_KEYS.LAPORAN_POSYANDU, []);
+    checkAndInit(STORAGE_KEYS.LOGS, []);
     
     if (!localStorage.getItem(STORAGE_KEYS.WA_NOTIFS)) {
       localStorage.setItem(STORAGE_KEYS.WA_NOTIFS, JSON.stringify([]));
@@ -247,26 +286,28 @@ class StorageService {
     if (!localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID)) {
       localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, 'USR-001'); // Default Admin
     }
+    if (!localStorage.getItem(STORAGE_KEYS.GAS_URL)) {
+      localStorage.setItem(STORAGE_KEYS.GAS_URL, 'https://script.google.com/macros/s/AKfycbws8A6yMS1C7rCCs5afT0skv53UzH3qBpxrWwUvHmoyRQK0MDu9MmbJDpkEMHEmeQKt/exec');
+    }
   }
 
   public resetToDefault() {
+    this.cleanDummyData(true);
     localStorage.setItem(STORAGE_KEYS.PULAU, JSON.stringify(INITIAL_PULAU));
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
-    localStorage.setItem(STORAGE_KEYS.SASARAN, JSON.stringify(INITIAL_SASARAN));
-    localStorage.setItem(STORAGE_KEYS.TINDAK_LANJUT, JSON.stringify(INITIAL_TINDAK_LANJUT));
-    localStorage.setItem(STORAGE_KEYS.KENDALA, JSON.stringify(INITIAL_KENDALA));
-    localStorage.setItem(STORAGE_KEYS.LINTAS_SEKTOR, JSON.stringify(INITIAL_LINTAS_SEKTOR));
-    localStorage.setItem(STORAGE_KEYS.LOGS, JSON.stringify(INITIAL_LOGS));
     localStorage.setItem(STORAGE_KEYS.KELURAHAN, JSON.stringify(INITIAL_KELURAHAN));
     localStorage.setItem(STORAGE_KEYS.POSYANDU, JSON.stringify(INITIAL_POSYANDU));
     localStorage.setItem(STORAGE_KEYS.USER_LINTAS_SEKTOR, JSON.stringify(INITIAL_USER_LINTAS_SEKTOR));
-    localStorage.setItem(STORAGE_KEYS.LAPORAN_POSYANDU, JSON.stringify(INITIAL_LAPORAN_POSYANDU));
-    this.addLog('RESET', 'SYSTEM', 'SYS-001', 'Data demo berhasil direset ke setelan awal', 'SUCCESS');
+    this.addLog('RESET', 'SYSTEM', 'SYS-001', 'Data operasional dibersihkan dan siap sinkron ke GAS', 'SUCCESS');
   }
 
   // --- GAS URL Config ---
   public getGasUrl(): string {
-    return localStorage.getItem(STORAGE_KEYS.GAS_URL) || '';
+    const custom = localStorage.getItem(STORAGE_KEYS.GAS_URL);
+    if (custom && custom.trim().startsWith('https://script.google.com/')) {
+      return custom.trim();
+    }
+    return 'https://script.google.com/macros/s/AKfycbws8A6yMS1C7rCCs5afT0skv53UzH3qBpxrWwUvHmoyRQK0MDu9MmbJDpkEMHEmeQKt/exec';
   }
 
   public setGasUrl(url: string) {
@@ -532,6 +573,14 @@ class StorageService {
     return saved;
   }
 
+  public deleteTindakLanjut(id: string): boolean {
+    const list = this.getTindakLanjutList();
+    const filtered = list.filter(t => t.tindak_lanjut_id !== id);
+    this.safeSetItem(STORAGE_KEYS.TINDAK_LANJUT, JSON.stringify(filtered));
+    this.addLog('CANCEL', 'TINDAK_LANJUT', id, `Menghapus data tindak lanjut ${id}`, 'SUCCESS');
+    return true;
+  }
+
   // --- Kendala ---
   public getKendalaList(pulauId?: string): Kendala[] {
     const raw = localStorage.getItem(STORAGE_KEYS.KENDALA);
@@ -666,6 +715,14 @@ class StorageService {
 
     localStorage.setItem(STORAGE_KEYS.LINTAS_SEKTOR, JSON.stringify(list));
     return saved;
+  }
+
+  public deleteLintasSektor(id: string): boolean {
+    const list = this.getLintasSektorList();
+    const filtered = list.filter(l => l.kegiatan_id !== id);
+    localStorage.setItem(STORAGE_KEYS.LINTAS_SEKTOR, JSON.stringify(filtered));
+    this.addLog('CANCEL', 'LINTAS_SEKTOR', id, `Menghapus kegiatan lintas sektor ${id}`, 'SUCCESS');
+    return true;
   }
 
   // --- Riwayat Aktivitas & Logging ---
@@ -1119,25 +1176,24 @@ class StorageService {
     laporan_posyandu?: LaporanPosyandu[];
   }) {
     let changed = false;
-    if (Array.isArray(gasData.sasaran) && gasData.sasaran.length > 0) {
+    if (Array.isArray(gasData.sasaran)) {
       localStorage.setItem(STORAGE_KEYS.SASARAN, JSON.stringify(gasData.sasaran));
       changed = true;
     }
-    if (Array.isArray(gasData.tindak_lanjut) && gasData.tindak_lanjut.length > 0) {
+    if (Array.isArray(gasData.tindak_lanjut)) {
       localStorage.setItem(STORAGE_KEYS.TINDAK_LANJUT, JSON.stringify(gasData.tindak_lanjut));
       changed = true;
     }
     if (Array.isArray(gasData.pulau) && gasData.pulau.length > 0) {
-      // Pastikan Pulau Bokor tidak masuk
       const cleanPulau = gasData.pulau.filter(p => p.pulau_id !== 'PULAU-06' && !p.nama_pulau.toLowerCase().includes('bokor'));
       localStorage.setItem(STORAGE_KEYS.PULAU, JSON.stringify(cleanPulau));
       changed = true;
     }
-    if (Array.isArray(gasData.kendala) && gasData.kendala.length > 0) {
+    if (Array.isArray(gasData.kendala)) {
       localStorage.setItem(STORAGE_KEYS.KENDALA, JSON.stringify(gasData.kendala));
       changed = true;
     }
-    if (Array.isArray(gasData.lintas_sektor) && gasData.lintas_sektor.length > 0) {
+    if (Array.isArray(gasData.lintas_sektor)) {
       localStorage.setItem(STORAGE_KEYS.LINTAS_SEKTOR, JSON.stringify(gasData.lintas_sektor));
       changed = true;
     }
@@ -1153,7 +1209,7 @@ class StorageService {
       localStorage.setItem(STORAGE_KEYS.USER_LINTAS_SEKTOR, JSON.stringify(gasData.lintas_sektor_users));
       changed = true;
     }
-    if (Array.isArray(gasData.laporan_posyandu) && gasData.laporan_posyandu.length > 0) {
+    if (Array.isArray(gasData.laporan_posyandu)) {
       localStorage.setItem(STORAGE_KEYS.LAPORAN_POSYANDU, JSON.stringify(gasData.laporan_posyandu));
       changed = true;
     }

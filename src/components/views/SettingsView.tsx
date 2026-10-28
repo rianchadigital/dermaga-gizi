@@ -89,6 +89,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRefreshData }) => 
     onRefreshData();
   };
 
+  const handleCleanDummyAndSyncGAS = async () => {
+    if (window.confirm('Bersihkan seluruh data dummy di browser dan sinkronkan data langsung dari database Google Spreadsheet (GAS)?')) {
+      storageService.cleanDummyData(true);
+      setIsLoading(true);
+      await apiService.fetchDatabaseData();
+      setIsLoading(false);
+      onRefreshData();
+      alert('Data dummy browser berhasil dibersihkan! Aplikasi kini terhubung langsung dengan database Google Apps Script.');
+    }
+  };
+
   const handleTestConnection = async () => {
     setIsLoading(true);
     const res = await apiService.testConnection(gasUrl);
@@ -225,7 +236,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRefreshData }) => 
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleCleanDummyAndSyncGAS}
+              disabled={isLoading}
+              className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 shrink-0"
+              title="Bersihkan data dummy dari browser dan muat data asli dari Google Apps Script"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+              <span>{isLoading ? 'Menghubungkan...' : 'Bersihkan Dummy & Sinkron GAS'}</span>
+            </button>
             <button
               onClick={handleResetData}
               className="px-3 py-2 bg-white/10 hover:bg-rose-500/20 text-white hover:text-rose-200 text-xs font-semibold rounded-xl border border-white/15 transition-colors flex items-center gap-1.5 shrink-0"

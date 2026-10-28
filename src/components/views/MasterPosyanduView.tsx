@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Posyandu, Kelurahan, User } from '../../types';
 import { storageService } from '../../services/storageService';
+import { apiService } from '../../services/apiService';
 
 interface MasterPosyanduViewProps {
   currentUser: User;
@@ -93,7 +94,7 @@ export const MasterPosyanduView: React.FC<MasterPosyanduViewProps> = ({
     setIsPosyanduModalOpen(true);
   };
 
-  const handleSavePosyandu = (e: React.FormEvent) => {
+  const handleSavePosyandu = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPosyandu.nama_posyandu || !editingPosyandu.kelurahan_id) return;
     
@@ -102,14 +103,14 @@ export const MasterPosyanduView: React.FC<MasterPosyanduViewProps> = ({
       ...(editingPosyandu as Posyandu),
       kelurahan_nama: kel?.nama_kelurahan || editingPosyandu.kelurahan_nama || ''
     };
-    storageService.savePosyandu(payload);
+    await apiService.savePosyandu(payload);
     setIsPosyanduModalOpen(false);
     onRefreshData();
   };
 
-  const handleDeletePosyandu = (id: string, nama: string) => {
+  const handleDeletePosyandu = async (id: string, nama: string) => {
     if (window.confirm(`Yakin ingin menghapus posyandu "${nama}" dari master data?`)) {
-      storageService.deletePosyandu(id);
+      await apiService.deletePosyandu(id);
       onRefreshData();
     }
   };
@@ -120,10 +121,10 @@ export const MasterPosyanduView: React.FC<MasterPosyanduViewProps> = ({
     setIsKelurahanModalOpen(true);
   };
 
-  const handleSaveKelurahan = (e: React.FormEvent) => {
+  const handleSaveKelurahan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingKelurahan.nama_kelurahan || !editingKelurahan.kelurahan_id) return;
-    storageService.saveKelurahan(editingKelurahan as Kelurahan);
+    await apiService.saveKelurahan(editingKelurahan as Kelurahan);
     setIsKelurahanModalOpen(false);
     onRefreshData();
   };

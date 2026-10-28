@@ -1,22 +1,70 @@
 /**
  * API Service for DERMAGA GIZI
- * Integrates with Google Apps Script Web App Backend & Google Spreadsheet
- * Synchronizes directly with the remote database (focus on database, not local)
+ * Integrates directly with Google Apps Script Web App Backend & Google Spreadsheet
+ * Synchronizes directly with the remote database (Clean Database Mode, Focus on Spreadsheet)
  */
 
 import { storageService } from './storageService';
-import { ApiResponse, SasaranBalita, TindakLanjut, Kendala, KegiatanLintasSektor } from '../types';
+import { 
+  ApiResponse, 
+  SasaranBalita, 
+  TindakLanjut, 
+  Kendala, 
+  KegiatanLintasSektor,
+  Posyandu,
+  Kelurahan,
+  User,
+  UserLintasSektor,
+  TindakLanjutLintasSektor,
+  WhatsAppNotification
+} from '../types';
+
+export const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbws8A6yMS1C7rCCs5afT0skv53UzH3qBpxrWwUvHmoyRQK0MDu9MmbJDpkEMHEmeQKt/exec';
 
 class ApiService {
   private isPolling = false;
 
   public getBaseUrl(): string {
-    return storageService.getGasUrl();
+    return storageService.getGasUrl() || DEFAULT_GAS_URL;
   }
 
   public isConnected(): boolean {
     const url = this.getBaseUrl();
     return !!(url && url.startsWith('https://script.google.com/'));
+  }
+
+  /**
+   * Helper pengiriman POST ke Web App Google Apps Script
+   * Menggunakan text/plain agar tidak memicu CORS Preflight OPTIONS blocking
+   */
+  private async postToGas(action: string, data: any): Promise<boolean> {
+    const targetUrl = this.getBaseUrl();
+    if (!targetUrl || !targetUrl.startsWith('https://script.google.com/')) {
+      return false;
+    }
+
+    try {
+      const payload = {
+        action,
+        data,
+        user: storageService.getCurrentUser(),
+        timestamp: new Date().toISOString()
+      };
+
+      await fetch(targetUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload),
+        mode: 'no-cors'
+      });
+
+      // Jadwalkan polling cepat untuk merefresh state dari Google Spreadsheet
+      setTimeout(() => this.fetchDatabaseData(), 800);
+      return true;
+    } catch (e) {
+      console.warn(`[ApiService] Gagal POST "${action}" ke Google Apps Script:`, e);
+      return false;
+    }
   }
 
   /**
@@ -27,7 +75,7 @@ class ApiService {
     if (!targetUrl) {
       return {
         success: false,
-        message: 'URL Google Apps Script belum dikonfigurasi. Aplikasi saat ini berjalan dalam Mode Demo.'
+        message: 'URL Google Apps Script belum dikonfigurasi.'
       };
     }
 
@@ -89,7 +137,7 @@ class ApiService {
 
   /**
    * Sinkronisasi data utama dari Google Spreadsheet Database (Remote) ke Aplikasi
-   * Dipanggil secara periodik (polling 3 detik) atau pasca transaksi
+   * Dipanggil secara periodik atau setelah transaksi simpan/hapus
    */
   public async fetchDatabaseData(): Promise<boolean> {
     if (!this.isConnected() || this.isPolling) return false;
@@ -100,7 +148,7 @@ class ApiService {
       const endpoint = `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}action=getAllData&_t=${Date.now()}`;
       
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 9000);
 
       const response = await fetch(endpoint, {
         method: 'GET',
@@ -117,7 +165,7 @@ class ApiService {
         }
       }
     } catch (err) {
-      // Background sync quiet catch
+      // Quiet catch
     } finally {
       this.isPolling = false;
     }
@@ -156,16 +204,9 @@ class ApiService {
   }
 
   /**
-   * Alias inisialisasi database spreadsheet
+   * Membersihkan semua baris data di spreadsheet (menyisakan baris header)
    */
-  public async initializeSpreadsheet(url?: string): Promise<ApiResponse> {
-    return this.setupDatabase(url);
-  }
-
-  /**
-   * Membersihkan seluruh data baris demo dari Google Spreadsheet (hanya sisakan header)
-   */
-  public async clearAllDatabaseRows(url?: string): Promise<ApiResponse> {
+  public async clearAllData(url?: string): Promise<ApiResponse> {
     const targetUrl = (url || this.getBaseUrl()).trim();
     if (!targetUrl) {
       return {
@@ -179,6 +220,10 @@ class ApiService {
       const endpoint = `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}action=clearAllData&_t=${Date.now()}`;
       const res = await fetch(endpoint, { method: 'GET' });
       const json = await res.json();
+      if (json && json.success) {
+        storageService.cleanDummyData(true);
+        setTimeout(() => this.fetchDatabaseData(), 800);
+      }
       return json;
     } catch (err: any) {
       return {
@@ -187,6 +232,10 @@ class ApiService {
         data: null
       };
     }
+  }
+
+  public async clearAllDatabaseRows(url?: string): Promise<ApiResponse> {
+    return this.clearAllData(url);
   }
 
   /**
@@ -230,7 +279,7 @@ class ApiService {
     try {
       const res = await fetch(this.getBaseUrl(), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({
           action: 'sendWhatsApp',
           data: { phone, message }
@@ -247,202 +296,157 @@ class ApiService {
   }
 
   /**
-   * Menyimpan Konfigurasi (seperti token WA) ke Sheet KONFIGURASI
+   * Menyimpan Konfigurasi ke Sheet KONFIGURASI
    */
-  public async saveConfigToGas(key: string, value: string, deskripsi: string = ''): Promise<ApiResponse> {
-    if (!this.isConnected()) return { success: false, message: 'Belum terhubung', data: null };
+  public async saveConfig(key: string, value: string, deskripsi: string = ''): Promise<ApiResponse> {
+    if (!this.isConnected()) {
+      return { success: false, message: 'Belum terhubung ke Google Apps Script', data: null };
+    }
+
     try {
-      const res = await fetch(this.getBaseUrl(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'saveConfig',
-          data: { key, value, deskripsi }
-        })
-      });
-      return await res.json();
+      await this.postToGas('saveConfig', { key, value, deskripsi });
+      return { success: true, message: `Konfigurasi ${key} berhasil disimpan.`, data: { key, value } };
     } catch (e: any) {
       return { success: false, message: e.message, data: null };
     }
   }
 
-  // --- CRUD Sasaran ---
+  // ==========================================
+  // --- CRUD SASARAN BALITA ---
+  // ==========================================
   public async saveSasaran(sasaran: SasaranBalita): Promise<SasaranBalita> {
-    return this.createSasaran(sasaran);
+    const saved = storageService.saveSasaran(sasaran);
+    storageService.notifyNewSasaran(saved);
+    await this.postToGas(sasaran.sasaran_id ? 'updateSasaran' : 'createSasaran', saved);
+    return saved;
   }
 
   public async createSasaran(sasaran: SasaranBalita): Promise<SasaranBalita> {
-    const saved = storageService.saveSasaran(sasaran);
-    
-    // Trigger notifikasi WhatsApp otomatis ke Kader, Petugas, dan Lintas Sektor
-    storageService.notifyNewSasaran(saved);
-
-    if (this.isConnected()) {
-      try {
-        const payload = {
-          action: 'createSasaran',
-          data: saved,
-          user: storageService.getCurrentUser()
-        };
-        await fetch(this.getBaseUrl(), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          mode: 'no-cors'
-        });
-        // Lakukan sinkronisasi ulang langsung dengan database Google Spreadsheet
-        setTimeout(() => this.fetchDatabaseData(), 500);
-      } catch (e) {
-        console.warn('Gagal sinkronisasi remote ke Google Apps Script:', e);
-      }
-    }
-    return saved;
+    return this.saveSasaran(sasaran);
   }
 
   public async deleteSasaran(id: string): Promise<boolean> {
     const success = storageService.deleteSasaran(id);
-    if (this.isConnected()) {
-      try {
-        await fetch(this.getBaseUrl(), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'deleteSasaran',
-            data: { sasaran_id: id },
-            user: storageService.getCurrentUser()
-          }),
-          mode: 'no-cors'
-        });
-        setTimeout(() => this.fetchDatabaseData(), 500);
-      } catch (e) {
-        console.warn('Gagal sinkronisasi hapus ke Google Apps Script:', e);
-      }
-    }
+    await this.postToGas('deleteSasaran', { sasaran_id: id });
     return success;
   }
 
   public async importSasaranBatch(items: Partial<SasaranBalita>[]): Promise<{ count: number; imported: SasaranBalita[] }> {
     const result = storageService.importSasaranBatch(items);
-    if (this.isConnected()) {
-      try {
-        await fetch(this.getBaseUrl(), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'importSasaranBatch',
-            data: result.imported,
-            user: storageService.getCurrentUser()
-          }),
-          mode: 'no-cors'
-        });
-        setTimeout(() => this.fetchDatabaseData(), 500);
-      } catch (e) {
-        console.warn('Gagal sinkronisasi import batch ke Google Apps Script:', e);
-      }
+    await this.postToGas('importSasaranBatch', result.imported);
+    return result;
+  }
+
+  // ==========================================
+  // --- CRUD TINDAK LANJUT ---
+  // ==========================================
+  public async saveTindakLanjut(tl: TindakLanjut, isNew: boolean = false): Promise<TindakLanjut> {
+    const saved = storageService.saveTindakLanjut(tl);
+    storageService.notifyTindakLanjut(saved, isNew);
+    await this.postToGas(tl.tindak_lanjut_id && !isNew ? 'updateTindakLanjut' : 'createTindakLanjut', saved);
+    return saved;
+  }
+
+  public async deleteTindakLanjut(id: string): Promise<boolean> {
+    const success = storageService.deleteTindakLanjut(id);
+    await this.postToGas('deleteTindakLanjut', { tindak_lanjut_id: id });
+    return success;
+  }
+
+  public async addTindakLanjutLintasSektor(
+    tindakLanjutId: string, 
+    aksiItem: Omit<TindakLanjutLintasSektor, 'id' | 'created_at'>,
+    sendNotification: boolean = true,
+    isPetugasGizi: boolean = false
+  ): Promise<{ updatedTL: TindakLanjut | null; notifications: WhatsAppNotification[] }> {
+    const result = storageService.addTindakLanjutLintasSektor(tindakLanjutId, aksiItem, sendNotification, isPetugasGizi);
+    if (result.updatedTL) {
+      await this.postToGas('updateTindakLanjut', result.updatedTL);
     }
     return result;
   }
 
-  // --- CRUD Tindak Lanjut ---
-  public async saveTindakLanjut(tl: TindakLanjut, isNew: boolean = false): Promise<TindakLanjut> {
-    const saved = storageService.saveTindakLanjut(tl);
-
-    // Trigger notifikasi WhatsApp otomatis ke Petugas PJ, Kader, dan Lintas Sektor
-    storageService.notifyTindakLanjut(saved, isNew);
-
-    if (this.isConnected()) {
-      try {
-        const payload = {
-          action: tl.tindak_lanjut_id && !isNew ? 'updateTindakLanjut' : 'createTindakLanjut',
-          data: saved,
-          user: storageService.getCurrentUser()
-        };
-        await fetch(this.getBaseUrl(), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          mode: 'no-cors'
-        });
-        setTimeout(() => this.fetchDatabaseData(), 500);
-      } catch (e) {
-        console.warn('Gagal sinkronisasi remote ke Google Apps Script:', e);
-      }
-    }
-    return saved;
-  }
-
-  // --- CRUD Kendala ---
+  // ==========================================
+  // --- CRUD KENDALA ---
+  // ==========================================
   public async saveKendala(k: Kendala): Promise<Kendala> {
     const saved = storageService.saveKendala(k);
-
-    if (this.isConnected()) {
-      try {
-        const payload = {
-          action: k.kendala_id ? 'updateKendala' : 'createKendala',
-          data: saved,
-          user: storageService.getCurrentUser()
-        };
-        await fetch(this.getBaseUrl(), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          mode: 'no-cors'
-        });
-        setTimeout(() => this.fetchDatabaseData(), 500);
-      } catch (e) {
-        console.warn('Gagal sinkronisasi remote ke Google Apps Script:', e);
-      }
-    }
+    await this.postToGas(k.kendala_id ? 'updateKendala' : 'createKendala', saved);
     return saved;
   }
 
-  // --- CRUD Lintas Sektor ---
+  public async deleteKendala(id: string): Promise<boolean> {
+    const success = storageService.deleteKendala(id);
+    await this.postToGas('deleteKendala', { kendala_id: id });
+    return success;
+  }
+
+  // ==========================================
+  // --- CRUD LINTAS SEKTOR ---
+  // ==========================================
   public async saveLintasSektor(ls: KegiatanLintasSektor): Promise<KegiatanLintasSektor> {
     const saved = storageService.saveLintasSektor(ls);
-
-    if (this.isConnected()) {
-      try {
-        const payload = {
-          action: ls.kegiatan_id ? 'updateLintasSektor' : 'createLintasSektor',
-          data: saved,
-          user: storageService.getCurrentUser()
-        };
-        await fetch(this.getBaseUrl(), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          mode: 'no-cors'
-        });
-        setTimeout(() => this.fetchDatabaseData(), 500);
-      } catch (e) {
-        console.warn('Gagal sinkronisasi remote ke Google Apps Script:', e);
-      }
-    }
+    await this.postToGas(ls.kegiatan_id ? 'updateLintasSektor' : 'createLintasSektor', saved);
     return saved;
   }
 
-  // --- Input Laporan Posyandu & Auto-Trigger Lintas Sektor ---
+  public async deleteLintasSektor(id: string): Promise<boolean> {
+    const success = storageService.deleteLintasSektor(id);
+    await this.postToGas('deleteLintasSektor', { kegiatan_id: id });
+    return success;
+  }
+
+  // ==========================================
+  // --- MASTER POSYANDU & KELURAHAN ---
+  // ==========================================
+  public async savePosyandu(pos: Posyandu): Promise<Posyandu> {
+    storageService.savePosyandu(pos);
+    await this.postToGas(pos.posyandu_id ? 'updatePosyandu' : 'createPosyandu', pos);
+    return pos;
+  }
+
+  public async deletePosyandu(id: string): Promise<boolean> {
+    storageService.deletePosyandu(id);
+    await this.postToGas('deletePosyandu', { posyandu_id: id });
+    return true;
+  }
+
+  public async saveKelurahan(kel: Kelurahan): Promise<Kelurahan> {
+    storageService.saveKelurahan(kel);
+    await this.postToGas(kel.kelurahan_id ? 'updateKelurahan' : 'createKelurahan', kel);
+    return kel;
+  }
+
+  // ==========================================
+  // --- MASTER USER LINTAS SEKTOR ---
+  // ==========================================
+  public async saveUserLintasSektor(u: UserLintasSektor): Promise<UserLintasSektor> {
+    storageService.saveUserLintasSektor(u);
+    await this.postToGas(u.user_id ? 'updateUserLintasSektor' : 'createUserLintasSektor', u);
+    return u;
+  }
+
+  public async deleteUserLintasSektor(id: string): Promise<boolean> {
+    storageService.deleteUserLintasSektor(id);
+    await this.postToGas('deleteUserLintasSektor', { user_id: id });
+    return true;
+  }
+
+  // ==========================================
+  // --- MANAJEMEN USER SISTEM ---
+  // ==========================================
+  public async saveUser(user: User): Promise<User> {
+    storageService.saveUser(user);
+    await this.postToGas(user.user_id ? 'updateUser' : 'createUser', user);
+    return user;
+  }
+
+  // ==========================================
+  // --- LAPORAN POSYANDU ---
+  // ==========================================
   public async saveLaporanPosyandu(laporan: any): Promise<any> {
     const result = storageService.saveLaporanPosyandu(laporan);
-
-    if (this.isConnected()) {
-      try {
-        const payload = {
-          action: 'createLaporanPosyandu',
-          data: result.savedLaporan,
-          user: storageService.getCurrentUser()
-        };
-        await fetch(this.getBaseUrl(), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          mode: 'no-cors'
-        });
-        setTimeout(() => this.fetchDatabaseData(), 500);
-      } catch (e) {
-        console.warn('Gagal sinkronisasi remote Laporan Posyandu ke Google Apps Script:', e);
-      }
-    }
+    await this.postToGas('createLaporanPosyandu', result.savedLaporan);
     return result;
   }
 }
