@@ -58,8 +58,8 @@ class ApiService {
         mode: 'no-cors'
       });
 
-      // Jadwalkan polling cepat untuk merefresh state dari Google Spreadsheet
-      setTimeout(() => this.fetchDatabaseData(), 800);
+      // Jadwalkan polling setelah Google Apps Script selesai menulis ke spreadsheet
+      setTimeout(() => this.fetchDatabaseData(), 2000);
       return true;
     } catch (e) {
       console.warn(`[ApiService] Gagal POST "${action}" ke Google Apps Script:`, e);

@@ -41,20 +41,28 @@ if (file_exists(__DIR__ . '/dist/index.html')) {
     exit;
 }
 
-// 3. Cari file bundle JavaScript dan CSS di folder assets/
+// 3. Cari file bundle JavaScript dan CSS terbaru berdasarkan waktu modifikasi (filemtime)
 $jsFile = '';
 $cssFile = '';
+$latestJsTime = 0;
+$latestCssTime = 0;
 
-$searchDirs = [__DIR__ . '/assets', __DIR__ . '/dist/assets'];
+$searchDirs = [__DIR__ . '/dist/assets', __DIR__ . '/assets'];
 foreach ($searchDirs as $dir) {
     if (is_dir($dir)) {
         $files = scandir($dir);
         foreach ($files as $file) {
-            if (empty($jsFile) && preg_match('/^index-.*\.js$/', $file)) {
-                $jsFile = '/assets/' . $file;
-            }
-            if (empty($cssFile) && preg_match('/^index-.*\.css$/', $file)) {
-                $cssFile = '/assets/' . $file;
+            $filePath = $dir . '/' . $file;
+            if (is_file($filePath)) {
+                $mtime = filemtime($filePath);
+                if (preg_match('/^index-.*\.js$/', $file) && $mtime > $latestJsTime) {
+                    $latestJsTime = $mtime;
+                    $jsFile = '/assets/' . $file;
+                }
+                if (preg_match('/^index-.*\.css$/', $file) && $mtime > $latestCssTime) {
+                    $latestCssTime = $mtime;
+                    $cssFile = '/assets/' . $file;
+                }
             }
         }
     }

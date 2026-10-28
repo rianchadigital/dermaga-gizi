@@ -1176,43 +1176,125 @@ class StorageService {
     laporan_posyandu?: LaporanPosyandu[];
   }) {
     let changed = false;
+
+    // 1. Sinkronisasi Sasaran Balita (Smart Merge agar data baru upload tidak terhapus)
     if (Array.isArray(gasData.sasaran)) {
-      localStorage.setItem(STORAGE_KEYS.SASARAN, JSON.stringify(gasData.sasaran));
-      changed = true;
+      if (gasData.sasaran.length > 0) {
+        const localList = this.getSasaranList();
+        const sasaranMap = new Map<string, SasaranBalita>();
+        const nikIndexMap = new Map<string, string>();
+
+        // Masukkan data remote dari spreadsheet
+        gasData.sasaran.forEach(remoteItem => {
+          const id = remoteItem.sasaran_id || (remoteItem.nik ? `NIK-${remoteItem.nik}` : remoteItem.kode_sasaran);
+          if (id) {
+            sasaranMap.set(id, remoteItem);
+          }
+          if (remoteItem.nik) {
+            nikIndexMap.set(String(remoteItem.nik).trim(), id);
+          }
+        });
+
+        // Pertahankan data lokal yang baru saja diupload/disimpan yang belum ada di spreadsheet
+        localList.forEach(localItem => {
+          const hasId = localItem.sasaran_id && sasaranMap.has(localItem.sasaran_id);
+          const hasNik = localItem.nik && nikIndexMap.has(String(localItem.nik).trim());
+          if (!hasId && !hasNik) {
+            const fallbackKey = localItem.sasaran_id || (localItem.nik ? `NIK-${localItem.nik}` : localItem.kode_sasaran);
+            if (fallbackKey) {
+              sasaranMap.set(fallbackKey, localItem);
+            }
+          }
+        });
+
+        localStorage.setItem(STORAGE_KEYS.SASARAN, JSON.stringify(Array.from(sasaranMap.values())));
+        changed = true;
+      }
     }
+
+    // 2. Sinkronisasi Tindak Lanjut (Smart Merge)
     if (Array.isArray(gasData.tindak_lanjut)) {
-      localStorage.setItem(STORAGE_KEYS.TINDAK_LANJUT, JSON.stringify(gasData.tindak_lanjut));
-      changed = true;
+      if (gasData.tindak_lanjut.length > 0) {
+        const localTL = this.getTindakLanjutList();
+        const tlMap = new Map<string, TindakLanjut>();
+
+        gasData.tindak_lanjut.forEach(remoteTL => {
+          if (remoteTL.tindak_lanjut_id) tlMap.set(remoteTL.tindak_lanjut_id, remoteTL);
+        });
+
+        localTL.forEach(localItem => {
+          if (localItem.tindak_lanjut_id && !tlMap.has(localItem.tindak_lanjut_id)) {
+            tlMap.set(localItem.tindak_lanjut_id, localItem);
+          }
+        });
+
+        localStorage.setItem(STORAGE_KEYS.TINDAK_LANJUT, JSON.stringify(Array.from(tlMap.values())));
+        changed = true;
+      }
     }
+
     if (Array.isArray(gasData.pulau) && gasData.pulau.length > 0) {
       const cleanPulau = gasData.pulau.filter(p => p.pulau_id !== 'PULAU-06' && !p.nama_pulau.toLowerCase().includes('bokor'));
       localStorage.setItem(STORAGE_KEYS.PULAU, JSON.stringify(cleanPulau));
       changed = true;
     }
+
+    // 3. Sinkronisasi Kendala (Smart Merge)
     if (Array.isArray(gasData.kendala)) {
-      localStorage.setItem(STORAGE_KEYS.KENDALA, JSON.stringify(gasData.kendala));
-      changed = true;
+      if (gasData.kendala.length > 0) {
+        const localK = this.getKendalaList();
+        const kMap = new Map<string, Kendala>();
+        gasData.kendala.forEach(k => {
+          if (k.kendala_id) kMap.set(k.kendala_id, k);
+        });
+        localK.forEach(k => {
+          if (k.kendala_id && !kMap.has(k.kendala_id)) {
+            kMap.set(k.kendala_id, k);
+          }
+        });
+        localStorage.setItem(STORAGE_KEYS.KENDALA, JSON.stringify(Array.from(kMap.values())));
+        changed = true;
+      }
     }
+
+    // 4. Sinkronisasi Lintas Sektor
     if (Array.isArray(gasData.lintas_sektor)) {
-      localStorage.setItem(STORAGE_KEYS.LINTAS_SEKTOR, JSON.stringify(gasData.lintas_sektor));
-      changed = true;
+      if (gasData.lintas_sektor.length > 0) {
+        const localLS = this.getLintasSektorList();
+        const lsMap = new Map<string, KegiatanLintasSektor>();
+        gasData.lintas_sektor.forEach(ls => {
+          if (ls.kegiatan_id) lsMap.set(ls.kegiatan_id, ls);
+        });
+        localLS.forEach(ls => {
+          if (ls.kegiatan_id && !lsMap.has(ls.kegiatan_id)) {
+            lsMap.set(ls.kegiatan_id, ls);
+          }
+        });
+        localStorage.setItem(STORAGE_KEYS.LINTAS_SEKTOR, JSON.stringify(Array.from(lsMap.values())));
+        changed = true;
+      }
     }
+
     if (Array.isArray(gasData.posyandu) && gasData.posyandu.length > 0) {
       localStorage.setItem(STORAGE_KEYS.POSYANDU, JSON.stringify(gasData.posyandu));
       changed = true;
     }
+
     if (Array.isArray(gasData.kelurahan) && gasData.kelurahan.length > 0) {
       localStorage.setItem(STORAGE_KEYS.KELURAHAN, JSON.stringify(gasData.kelurahan));
       changed = true;
     }
+
     if (Array.isArray(gasData.lintas_sektor_users) && gasData.lintas_sektor_users.length > 0) {
       localStorage.setItem(STORAGE_KEYS.USER_LINTAS_SEKTOR, JSON.stringify(gasData.lintas_sektor_users));
       changed = true;
     }
-    if (Array.isArray(gasData.laporan_posyandu)) {
+
+    if (Array.isArray(gasData.laporan_posyandu) && gasData.laporan_posyandu.length > 0) {
       localStorage.setItem(STORAGE_KEYS.LAPORAN_POSYANDU, JSON.stringify(gasData.laporan_posyandu));
       changed = true;
     }
+
     return changed;
   }
 

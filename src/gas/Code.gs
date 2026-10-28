@@ -671,55 +671,51 @@ function doPost(e) {
       });
     }
 
-    // CRUD Sasaran Balita
-    if (action === 'createSasaran') return handleCreateRecord(SHEETS.SASARAN, HEADERS.SASARAN, data, 'SASARAN', currentUser);
-    if (action === 'updateSasaran') return handleUpdateRecord(SHEETS.SASARAN, 'sasaran_id', data.sasaran_id, data, 'SASARAN', currentUser);
+    // CRUD Sasaran Balita (Create / Update / Import)
+    if (action === 'createSasaran' || action === 'saveSasaran' || action === 'updateSasaran') {
+      return handleCreateOrUpdateRecord(SHEETS.SASARAN, HEADERS.SASARAN, 'sasaran_id', data.sasaran_id, data, 'SASARAN', currentUser);
+    }
     if (action === 'deleteSasaran') return handleDeleteRecord(SHEETS.SASARAN, 'sasaran_id', data.sasaran_id, 'SASARAN', currentUser);
 
     // CRUD Tindak Lanjut
-    if (action === 'createTindakLanjut') return handleCreateRecord(SHEETS.TINDAK_LANJUT, HEADERS.TINDAK_LANJUT, data, 'TINDAK_LANJUT', currentUser);
-    if (action === 'updateTindakLanjut') return handleUpdateRecord(SHEETS.TINDAK_LANJUT, 'tindak_lanjut_id', data.tindak_lanjut_id, data, 'TINDAK_LANJUT', currentUser);
+    if (action === 'createTindakLanjut' || action === 'saveTindakLanjut' || action === 'updateTindakLanjut') {
+      return handleCreateOrUpdateRecord(SHEETS.TINDAK_LANJUT, HEADERS.TINDAK_LANJUT, 'tindak_lanjut_id', data.tindak_lanjut_id, data, 'TINDAK_LANJUT', currentUser);
+    }
     if (action === 'deleteTindakLanjut') return handleDeleteRecord(SHEETS.TINDAK_LANJUT, 'tindak_lanjut_id', data.tindak_lanjut_id, 'TINDAK_LANJUT', currentUser);
 
     // CRUD Master Posyandu
-    if (action === 'createPosyandu') return handleCreateRecord(SHEETS.MASTER_POSYANDU, HEADERS.MASTER_POSYANDU, data, 'POSYANDU', currentUser);
-    if (action === 'updatePosyandu') return handleUpdateRecord(SHEETS.MASTER_POSYANDU, 'posyandu_id', data.posyandu_id, data, 'POSYANDU', currentUser);
+    if (action === 'createPosyandu' || action === 'updatePosyandu') return handleCreateOrUpdateRecord(SHEETS.MASTER_POSYANDU, HEADERS.MASTER_POSYANDU, 'posyandu_id', data.posyandu_id, data, 'POSYANDU', currentUser);
     if (action === 'deletePosyandu') return handleDeleteRecord(SHEETS.MASTER_POSYANDU, 'posyandu_id', data.posyandu_id, 'POSYANDU', currentUser);
 
     // CRUD Master Kelurahan
-    if (action === 'createKelurahan') return handleCreateRecord(SHEETS.MASTER_KELURAHAN, HEADERS.MASTER_KELURAHAN, data, 'KELURAHAN', currentUser);
-    if (action === 'updateKelurahan') return handleUpdateRecord(SHEETS.MASTER_KELURAHAN, 'kelurahan_id', data.kelurahan_id, data, 'KELURAHAN', currentUser);
+    if (action === 'createKelurahan' || action === 'updateKelurahan') return handleCreateOrUpdateRecord(SHEETS.MASTER_KELURAHAN, HEADERS.MASTER_KELURAHAN, 'kelurahan_id', data.kelurahan_id, data, 'KELURAHAN', currentUser);
 
     // CRUD Master User Lintas Sektor
-    if (action === 'createUserLintasSektor') return handleCreateRecord(SHEETS.MASTER_LINTAS_SEKTOR, HEADERS.MASTER_LINTAS_SEKTOR, data, 'USER_LINTAS_SEKTOR', currentUser);
-    if (action === 'updateUserLintasSektor') return handleUpdateRecord(SHEETS.MASTER_LINTAS_SEKTOR, 'user_id', data.user_id, data, 'USER_LINTAS_SEKTOR', currentUser);
+    if (action === 'createUserLintasSektor' || action === 'updateUserLintasSektor') return handleCreateOrUpdateRecord(SHEETS.MASTER_LINTAS_SEKTOR, HEADERS.MASTER_LINTAS_SEKTOR, 'user_id', data.user_id, data, 'USER_LINTAS_SEKTOR', currentUser);
     if (action === 'deleteUserLintasSektor') return handleDeleteRecord(SHEETS.MASTER_LINTAS_SEKTOR, 'user_id', data.user_id, 'USER_LINTAS_SEKTOR', currentUser);
 
     // CRUD User Sistem
-    if (action === 'createUser') return handleCreateRecord(SHEETS.USERS, HEADERS.USERS, data, 'USER', currentUser);
-    if (action === 'updateUser') return handleUpdateRecord(SHEETS.USERS, 'user_id', data.user_id, data, 'USER', currentUser);
+    if (action === 'createUser' || action === 'updateUser') return handleCreateOrUpdateRecord(SHEETS.USERS, HEADERS.USERS, 'user_id', data.user_id, data, 'USER', currentUser);
 
     // CRUD Kendala
-    if (action === 'createKendala') return handleCreateRecord(SHEETS.KENDALA, HEADERS.KENDALA, data, 'KENDALA', currentUser);
-    if (action === 'updateKendala') return handleUpdateRecord(SHEETS.KENDALA, 'kendala_id', data.kendala_id, data, 'KENDALA', currentUser);
+    if (action === 'createKendala' || action === 'updateKendala') return handleCreateOrUpdateRecord(SHEETS.KENDALA, HEADERS.KENDALA, 'kendala_id', data.kendala_id, data, 'KENDALA', currentUser);
     if (action === 'deleteKendala') return handleDeleteRecord(SHEETS.KENDALA, 'kendala_id', data.kendala_id, 'KENDALA', currentUser);
 
     // CRUD Lintas Sektor
-    if (action === 'createLintasSektor') return handleCreateRecord(SHEETS.LINTAS_SEKTOR, HEADERS.LINTAS_SEKTOR, data, 'LINTAS_SEKTOR', currentUser);
-    if (action === 'updateLintasSektor') return handleUpdateRecord(SHEETS.LINTAS_SEKTOR, 'kegiatan_id', data.kegiatan_id, data, 'LINTAS_SEKTOR', currentUser);
+    if (action === 'createLintasSektor' || action === 'updateLintasSektor') return handleCreateOrUpdateRecord(SHEETS.LINTAS_SEKTOR, HEADERS.LINTAS_SEKTOR, 'kegiatan_id', data.kegiatan_id, data, 'LINTAS_SEKTOR', currentUser);
     if (action === 'deleteLintasSektor') return handleDeleteRecord(SHEETS.LINTAS_SEKTOR, 'kegiatan_id', data.kegiatan_id, 'LINTAS_SEKTOR', currentUser);
 
     // Batch Import Sasaran Balita
     if (action === 'importSasaranBatch') {
       var items = Array.isArray(data) ? data : (data.items || []);
-      var ss = SpreadsheetApp.getActiveSpreadsheet();
-      var sasaranSheet = ss.getSheetByName(SHEETS.SASARAN);
-      if (sasaranSheet && items.length > 0) {
-        for (var i = 0; i < items.length; i++) {
-          handleUpdateRecord(SHEETS.SASARAN, 'sasaran_id', items[i].sasaran_id, items[i], 'SASARAN', currentUser);
-        }
+      var count = 0;
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i];
+        handleCreateOrUpdateRecord(SHEETS.SASARAN, HEADERS.SASARAN, 'sasaran_id', item.sasaran_id, item, 'SASARAN', currentUser);
+        count++;
       }
-      return jsonResponse(true, items.length + ' data sasaran berhasil diimpor.', { count: items.length });
+      SpreadsheetApp.flush();
+      return jsonResponse(true, count + ' data sasaran berhasil disimpan ke Google Spreadsheet.', { count: count });
     }
 
     // Simpan Konfigurasi
@@ -865,7 +861,62 @@ function handleUpdateRecord(sheetName, idColName, idValue, dataObj, jenisData, u
   }
 
   logInternalActivity(user ? user.user_id : 'SYSTEM', 'UPDATE', jenisData, idValue, 'Update data pada ' + sheetName, 'SUCCESS');
+  SpreadsheetApp.flush();
   return jsonResponse(true, 'Data berhasil diperbarui di ' + sheetName, dataObj);
+}
+
+function handleCreateOrUpdateRecord(sheetName, headerCols, idColName, idValue, dataObj, jenisData, user) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    setupDatabase();
+    sheet = ss.getSheetByName(sheetName);
+  }
+  if (!sheet) return jsonResponse(false, 'Sheet tidak ditemukan: ' + sheetName, null);
+
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  var targetRow = -1;
+
+  if (lastRow > 1 && lastCol > 0) {
+    var values = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+    var headers = values[0];
+    var idIndex = headers.indexOf(idColName);
+    var nikIndex = headers.indexOf('nik');
+
+    if (idIndex !== -1 && idValue) {
+      for (var i = 1; i < values.length; i++) {
+        var rowId = String(values[i][idIndex]);
+        var rowNik = (nikIndex !== -1 && dataObj && dataObj.nik) ? String(values[i][nikIndex]) : '';
+        if (rowId === String(idValue) || (rowNik && rowNik === String(dataObj.nik))) {
+          targetRow = i + 1;
+          break;
+        }
+      }
+    }
+  }
+
+  // Jika record sudah ada di sheet -> Lakukan UPDATE
+  if (targetRow > 1) {
+    dataObj.updated_at = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'dd/MM/yyyy HH:mm:ss');
+    var currentHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    for (var j = 0; j < currentHeaders.length; j++) {
+      var colName = currentHeaders[j];
+      if (dataObj[colName] !== undefined) {
+        var cellVal = dataObj[colName];
+        if (typeof cellVal === 'object' && cellVal !== null) {
+          try { cellVal = JSON.stringify(cellVal); } catch (e) {}
+        }
+        sheet.getRange(targetRow, j + 1).setValue(cellVal);
+      }
+    }
+    SpreadsheetApp.flush();
+    logInternalActivity(user ? user.user_id : 'SYSTEM', 'UPDATE', jenisData, idValue, 'Update data pada ' + sheetName, 'SUCCESS');
+    return jsonResponse(true, 'Data berhasil diperbarui di ' + sheetName, dataObj);
+  }
+
+  // Jika record belum ada -> INSERT / APPEND BARU
+  return handleCreateRecord(sheetName, headerCols, dataObj, jenisData, user);
 }
 
 function handleDeleteRecord(sheetName, idColName, idValue, jenisData, user) {
