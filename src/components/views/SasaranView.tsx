@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   Baby, 
   Search, 
@@ -21,7 +21,14 @@ import {
   AlertTriangle,
   FileDown,
   Building,
-  UserCheck
+  UserCheck,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  Check,
+  Phone,
+  User as UserIcon,
+  HelpCircle
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { GlobalFilter, Pulau, SasaranBalita, User, KategoriMasalahGizi } from '../../types';
@@ -45,9 +52,18 @@ export const SasaranView: React.FC<SasaranViewProps> = ({
   onRefreshData
 }) => {
   const [search, setSearch] = useState('');
+  const [selectedPosyanduFilter, setSelectedPosyanduFilter] = useState<string>('ALL');
+  const [selectedStatusGiziFilter, setSelectedStatusGiziFilter] = useState<string>('ALL');
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+
+  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [activeSasaran, setActiveSasaran] = useState<Partial<SasaranBalita>>({});
-  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  
+  // Modal Detail Rincian Balita (Eye Button)
+  const [detailSasaran, setDetailSasaran] = useState<SasaranBalita | null>(null);
   
   // Modal Hapus Data Balita
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
@@ -76,78 +92,143 @@ export const SasaranView: React.FC<SasaranViewProps> = ({
   const posyanduList = storageService.getPosyanduList();
   const kelurahanList = storageService.getKelurahanList();
 
-  const filteredSasaran = sasaranList.filter(s => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return s.kode_sasaran.toLowerCase().includes(q) || 
-      s.inisial.toLowerCase().includes(q) ||
-      (s.posyandu && s.posyandu.toLowerCase().includes(q)) ||
-      (s.bulan_pengukuran && s.bulan_pengukuran.toLowerCase().includes(q)) ||
-      (s.kategori_masalah_terakhir && s.kategori_masalah_terakhir.toLowerCase().includes(q));
-  });
-
   const canEdit = currentUser.role !== 'VIEWER';
   // Hanya Tenaga Gizi dan Admin (termasuk Kepala Puskesmas) yang dapat menghapus
   const canDelete = currentUser.role === 'ADMIN' || currentUser.role === 'TENAGA_GIZI' || currentUser.role === 'KEPALA_PUSKESMAS';
 
   const defaultBulan = 'Oktober 2026';
-  const bulanOptions = [
-    'Januari 2026', 'Februari 2026', 'Maret 2026', 'April 2026',
-    'Mei 2026', 'Juni 2026', 'Juli 2026', 'Agustus 2026',
-    'September 2026', 'Oktober 2026', 'November 2026', 'Desember 2026'
-  ];
 
+  // Filter Data Balita
+  const filteredSasaran = useMemo(() => {
+    return sasaranList.filter(s => {
+      // Filter posyandu
+      if (selectedPosyanduFilter !== 'ALL' && s.posyandu !== selectedPosyanduFilter) {
+        return false;
+      }
+
+      // Filter status gizi masalah
+      if (selectedStatusGiziFilter !== 'ALL') {
+        const kat = (s.kategori_masalah_terakhir || s.status_gizi_bbtb || '').toLowerCase();
+        if (selectedStatusGiziFilter === 'Wasting' && !kat.includes('wasting') && !kat.includes('kurang')) return false;
+        if (selectedStatusGiziFilter === 'Stunting' && !kat.includes('stunting') && !kat.includes('pendek') && !(s.status_gizi_tbu || '').toLowerCase().includes('pendek')) return false;
+        if (selectedStatusGiziFilter === 'Underweight' && !kat.includes('underweight') && !kat.includes('bb kurang') && !(s.status_gizi_bbu || '').toLowerCase().includes('kurang')) return false;
+        if (selectedStatusGiziFilter === 'Gizi Buruk' && !kat.includes('buruk')) return false;
+        if (selectedStatusGiziFilter === 'Overweight' && !kat.includes('overweight') && !kat.includes('lebih')) return false;
+        if (selectedStatusGiziFilter === 'Obesitas' && !kat.includes('obesitas')) return false;
+      }
+
+      // Search
+      if (search) {
+        const q = search.toLowerCase();
+        const matchNIK = s.nik ? s.nik.toLowerCase().includes(q) : false;
+        const matchKode = s.kode_sasaran.toLowerCase().includes(q);
+        const matchNama = s.inisial.toLowerCase().includes(q);
+        const matchOrtu = s.nama_ortu ? s.nama_ortu.toLowerCase().includes(q) : false;
+        const matchPosyandu = s.posyandu ? s.posyandu.toLowerCase().includes(q) : false;
+        const matchKelurahan = s.kelurahan_nama ? s.kelurahan_nama.toLowerCase().includes(q) : false;
+
+        if (!matchNIK && !matchKode && !matchNama && !matchOrtu && !matchPosyandu && !matchKelurahan) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [sasaranList, selectedPosyanduFilter, selectedStatusGiziFilter, search]);
+
+  // Pagination
+  const totalPages = Math.ceil(filteredSasaran.length / pageSize) || 1;
+  const paginatedSasaran = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredSasaran.slice(start, start + pageSize);
+  }, [filteredSasaran, currentPage, pageSize]);
+
+  // Modal Open Create
   const handleOpenCreate = () => {
+    setModalMode('create');
     const selectedPulau = pulauList.find(p => p.pulau_id === filter.pulau_id) || pulauList[0];
     const pulauCode = selectedPulau.nama_pulau.substring(6, 9).toUpperCase() || 'TDG';
-    const randomCode = Math.floor(10 + Math.random() * 89);
-    
-    // Temukan posyandu pertama yang sesuai pulau atau default
+    const randomCode = Math.floor(100 + Math.random() * 899);
     const matchedPosyandu = posyanduList.find(pos => pos.pulau_id === selectedPulau.pulau_id);
 
     setActiveSasaran({
       sasaran_id: `SAS-${Date.now().toString().slice(-4)}`,
-      kode_sasaran: `BLT-${pulauCode}-0${randomCode}`,
+      kode_sasaran: `BLT-${pulauCode}-${randomCode}`,
+      nik: `310101${Math.floor(1000000000 + Math.random() * 9000000000)}`,
       inisial: 'An. ',
-      tanggal_lahir: '01/01/2024',
       jenis_kelamin: 'L',
-      pulau_id: selectedPulau.pulau_id,
-      unit_pelayanan: selectedPulau.unit_pelayanan,
-      posyandu: matchedPosyandu ? matchedPosyandu.nama_posyandu : 'Posyandu Mawar I',
-      bulan_pengukuran: defaultBulan,
-      nik: '',
-      nama_ortu: '',
-      no_wa_ortu: '',
-      alamat: '',
-      rt_rw: 'RT 01 / RW 01',
-      tanggal_registrasi: new Date().toLocaleDateString('id-ID'),
-      status_aktif: true,
-      kategori_masalah_terakhir: 'Gizi Baik (Normal)',
+      tanggal_lahir: '01/01/2024',
+      usia: '24 Bulan',
+      tanggal_ukur: new Date().toLocaleDateString('id-ID'),
+      cara_ukur: 'Berdiri',
       bb_terakhir: 10.0,
       tb_terakhir: 80.0,
-      lila: 13.0,
-      tanggal_pantau_terakhir: new Date().toLocaleDateString('id-ID')
+      zscore_bbtb: '-1.50 SD',
+      status_gizi_bbtb: 'Gizi Kurang (Wasting)',
+      zscore_tbu: '-1.20 SD',
+      status_gizi_tbu: 'Normal',
+      zscore_bbu: '-1.80 SD',
+      status_gizi_bbu: 'BB Kurang (Underweight)',
+      naik_berat_badan: 'T',
+      keterangan_naik_bb: 'T (Tidak Naik)',
+      status_outlier_who: 'Normal',
+      nama_ortu: '',
+      no_hp: '',
+      no_wa_ortu: '',
+      wilayah_kecamatan: 'Kepulauan Seribu Selatan',
+      kelurahan_nama: 'Kelurahan Pulau Tidung',
+      puskesmas_pustu: selectedPulau.unit_pelayanan || 'Puskesmas Kepulauan Seribu Selatan',
+      posyandu: matchedPosyandu ? matchedPosyandu.nama_posyandu : 'Posyandu Mawar I',
+      pulau_id: selectedPulau.pulau_id,
+      unit_pelayanan: selectedPulau.unit_pelayanan,
+      tanggal_registrasi: new Date().toLocaleDateString('id-ID'),
+      status_aktif: true,
+      kategori_masalah_terakhir: 'Wasting (Kurus/Gizi Kurang)',
+      tanggal_pantau_terakhir: new Date().toLocaleDateString('id-ID'),
+      bulan_pengukuran: defaultBulan,
+      alamat: 'Jl. Utama RT 01 / RW 01',
+      rt_rw: 'RT 01 / RW 01',
+      lila: 12.5
     });
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (s: SasaranBalita) => {
+    setModalMode('edit');
     setActiveSasaran({ 
       ...s,
-      bulan_pengukuran: s.bulan_pengukuran || defaultBulan,
-      posyandu: s.posyandu || posyanduList[0]?.nama_posyandu || 'Posyandu Mawar I'
+      nik: s.nik || '',
+      usia: s.usia || '24 Bulan',
+      tanggal_ukur: s.tanggal_ukur || s.tanggal_pantau_terakhir || new Date().toLocaleDateString('id-ID'),
+      cara_ukur: s.cara_ukur || 'Berdiri',
+      zscore_bbtb: s.zscore_bbtb || '-1.50 SD',
+      status_gizi_bbtb: s.status_gizi_bbtb || s.kategori_masalah_terakhir || 'Gizi Kurang (Wasting)',
+      zscore_tbu: s.zscore_tbu || '-1.00 SD',
+      status_gizi_tbu: s.status_gizi_tbu || 'Normal',
+      zscore_bbu: s.zscore_bbu || '-1.20 SD',
+      status_gizi_bbu: s.status_gizi_bbu || 'Normal',
+      naik_berat_badan: s.naik_berat_badan || 'T',
+      keterangan_naik_bb: s.keterangan_naik_bb || 'T (Tidak Naik)',
+      status_outlier_who: s.status_outlier_who || 'Normal',
+      nama_ortu: s.nama_ortu || '',
+      no_hp: s.no_hp || s.no_wa_ortu || '',
+      wilayah_kecamatan: s.wilayah_kecamatan || 'Kepulauan Seribu Selatan',
+      kelurahan_nama: s.kelurahan_nama || 'Kelurahan Pulau Tidung',
+      puskesmas_pustu: s.puskesmas_pustu || s.unit_pelayanan || 'Puskesmas Kepulauan Seribu Selatan',
+      posyandu: s.posyandu || posyanduList[0]?.nama_posyandu || 'Posyandu Mawar I',
+      bulan_pengukuran: s.bulan_pengukuran || defaultBulan
     });
     setIsModalOpen(true);
   };
 
   const handleOpenDetail = (s: SasaranBalita) => {
-    setActiveSasaran({ ...s });
-    setIsDetailOpen(true);
+    setDetailSasaran(s);
   };
 
-  const handleDeleteSasaran = async () => {
-    if (!deleteConfirmModal?.sasaran) return;
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmModal || !deleteConfirmModal.sasaran) return;
     const sasaranToDelete = deleteConfirmModal.sasaran;
+    
     await apiService.deleteSasaran(sasaranToDelete.sasaran_id);
     setDeleteConfirmModal(null);
     onRefreshData();
@@ -155,97 +236,197 @@ export const SasaranView: React.FC<SasaranViewProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeSasaran.kode_sasaran || !activeSasaran.pulau_id) return;
+    if (!activeSasaran.inisial) return;
 
-    const saved = await apiService.createSasaran(activeSasaran as SasaranBalita);
+    const saved = await apiService.saveSasaran(activeSasaran as SasaranBalita);
     setIsModalOpen(false);
     onRefreshData();
 
-    const p = pulauList.find(item => item.pulau_id === saved.pulau_id);
-    const text = `🔔 *NOTIFIKASI DATA SASARAN BARU - DERMAGA GIZI*\n` +
-      `*PUSKESMAS KEPULAUAN SERIBU SELATAN*\n\n` +
-      `Telah ditambahkan data sasaran balita:\n` +
-      `• Kode Sasaran: *${saved.kode_sasaran}* (${saved.inisial})\n` +
-      `• Wilayah: *${p?.nama_pulau || saved.pulau_id}*\n` +
-      `• Posyandu: *${saved.posyandu || '-'}*\n` +
-      `• Bulan Pengukuran: *${saved.bulan_pengukuran || '-'}*\n` +
-      `• Status Gizi: *${saved.kategori_masalah_terakhir || 'Dalam Verifikasi'}*\n` +
-      `• Antropometri: BB ${saved.bb_terakhir} kg, TB ${saved.tb_terakhir} cm, LiLA ${saved.lila || '-'} cm\n\n` +
-      `Pemberitahuan telah otomatis diteruskan ke Kader Posyandu, Petugas Pustu, Nutrisionis, dan Lintas Sektor setempat.`;
+    // Notifikasi jika kasus gizi bermasalah
+    const isMasalahGizi = saved.kategori_masalah_terakhir && 
+      !saved.kategori_masalah_terakhir.includes('Baik') && 
+      !saved.kategori_masalah_terakhir.includes('Normal');
 
-    setWaAlertModal({
-      isOpen: true,
-      title: `Notifikasi WhatsApp: ${saved.kode_sasaran}`,
-      pulauName: p?.nama_pulau || 'Kepulauan Seribu Selatan',
-      text,
-      link: `https://wa.me/?text=${encodeURIComponent(text)}`,
-      recipients: [
-        'Kader Posyandu ' + (saved.posyandu || p?.nama_pulau || ''),
-        'Tenaga Gizi Puskesmas',
-        'Dokter/Bidan Pustu Terkait',
-        'Seksi Kesra Kelurahan (Lintas Sektor)'
-      ]
-    });
+    if (isMasalahGizi) {
+      const pulau = pulauList.find(p => p.pulau_id === saved.pulau_id);
+      const text = `🔔 *NOTIFIKASI DATA BALITA BERMASALAH GIZI - DERMAGA GIZI*\n` +
+        `*PUSKESMAS KEPULAUAN SERIBU SELATAN*\n\n` +
+        `Data balita telah diperbarui pada sistem:\n` +
+        `• NIK: *${saved.nik || '-'}*\n` +
+        `• Nama: *${saved.inisial}* (${saved.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan'})\n` +
+        `• Usia: *${saved.usia || '-'}*\n` +
+        `• Wilayah: *${pulau?.nama_pulau || 'Kepulauan Seribu'}* (${saved.posyandu || 'Posyandu'})\n` +
+        `• Antropometri: BB: *${saved.bb_terakhir} kg* | TB: *${saved.tb_terakhir} cm*\n` +
+        `• Z-Score BB/TB: *${saved.zscore_bbtb || '-'}* (Wasting: *${saved.status_gizi_bbtb || saved.kategori_masalah_terakhir}*)\n` +
+        `• Z-Score TB/U: *${saved.zscore_tbu || '-'}* (Stunting: *${saved.status_gizi_tbu || '-'}*)\n` +
+        `• Status Naik BB: *${saved.naik_berat_badan || '-'}* (${saved.keterangan_naik_bb || '-'})\n` +
+        `• Nama Orang Tua: ${saved.nama_ortu || '-'}\n` +
+        `• Status: *Perlu Tindak Lanjut Kolaborasi Lintas Sektor*\n\n` +
+        `Pantau dan koordinasikan bersama di sistem: ${storageService.getAppUrl()}`;
+
+      setWaAlertModal({
+        isOpen: true,
+        title: `Peringatan: Balita Teridentifikasi ${saved.kategori_masalah_terakhir}`,
+        pulauName: pulau?.nama_pulau || 'Kepulauan Seribu Selatan',
+        text,
+        link: `https://wa.me/?text=${encodeURIComponent(text)}`,
+        recipients: [
+          'Nutrisionis / Poli Gizi Puskesmas',
+          `Kader Posyandu (${saved.posyandu || 'Posyandu Terkait'})`,
+          'Tim Penggerak PKK Dasawisma',
+          'Seksi Kesra Kelurahan'
+        ]
+      });
+    }
   };
 
   const handleSendWA = (s: SasaranBalita) => {
-    storageService.notifyNewSasaran(s);
-    const p = pulauList.find(item => item.pulau_id === s.pulau_id);
-    const text = `🔔 *INFO SASARAN BALITA - DERMAGA GIZI*\n` +
+    const pulau = pulauList.find(p => p.pulau_id === s.pulau_id);
+    const text = `🔔 *NOTIFIKASI BALITA BERMASALAH GIZI - DERMAGA GIZI*\n` +
       `*PUSKESMAS KEPULAUAN SERIBU SELATAN*\n\n` +
-      `Data Pemantauan Balita:\n` +
-      `• Kode Sasaran: *${s.kode_sasaran}* (${s.inisial})\n` +
-      `• Wilayah: *${p?.nama_pulau || s.pulau_id}*\n` +
-      `• Posyandu: *${s.posyandu || '-'}*\n` +
-      `• Bulan Pengukuran: *${s.bulan_pengukuran || '-'}*\n` +
-      `• Status Gizi: *${s.kategori_masalah_terakhir || 'Normal'}*\n` +
-      `• Antropometri: BB ${s.bb_terakhir}kg, TB ${s.tb_terakhir}cm\n\n` +
-      `Silakan koordinasikan dengan kader posyandu dan tim lintas sektor setempat.`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+      `• NIK: *${s.nik || '-'}*\n` +
+      `• Nama Balita: *${s.inisial}* (${s.jenis_kelamin === 'L' ? 'L' : 'P'})\n` +
+      `• Tanggal Lahir: ${s.tanggal_lahir} (Usia: ${s.usia || '-'})\n` +
+      `• Posyandu / Wilayah: *${s.posyandu || '-'}* / ${pulau?.nama_pulau || 'Kepulauan Seribu'}\n` +
+      `• Tanggal Ukur: ${s.tanggal_ukur || s.tanggal_pantau_terakhir || '-'}\n` +
+      `• BB: *${s.bb_terakhir} kg* | TB: *${s.tb_terakhir} cm*\n` +
+      `• Z-Score BB/TB: *${s.zscore_bbtb || '-'}* (Wasting: ${s.status_gizi_bbtb || s.kategori_masalah_terakhir})\n` +
+      `• Z-Score TB/U: *${s.zscore_tbu || '-'}* (Stunting: ${s.status_gizi_tbu || '-'})\n` +
+      `• Z-Score BB/U: *${s.zscore_bbu || '-'}* (Underweight: ${s.status_gizi_bbu || '-'})\n` +
+      `• Keterangan Naik BB: *${s.keterangan_naik_bb || s.naik_berat_badan || '-'}*\n` +
+      `• Nama Orang Tua: ${s.nama_ortu || '-'}\n` +
+      `• No HP: ${s.no_hp || s.no_wa_ortu || '-'}\n\n` +
+      `Akses sistem DERMAGA GIZI: ${storageService.getAppUrl()}`;
+
+    const phone = s.no_wa_ortu || s.no_hp || '';
+    if (phone) {
+      window.open(`https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`, '_blank');
+    } else {
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    }
+  };
+
+  // --- Handlers Template & Ekspor Excel (24 Kolom e-PPGBM Standar) ---
+  const handleDownloadTemplate = () => {
+    const sampleData = [
+      {
+        'NIK': '3101011405240001',
+        'Nama': 'An. Alif Ramadhan',
+        'Jenis Kelamin': 'L',
+        'Tanggal Lahir': '14/05/2024',
+        'Usia': '29 Bulan',
+        'Tanggal Ukur': '12/10/2026',
+        'Cara Ukur': 'Berdiri',
+        'Berat Badan': 8.8,
+        'Tinggi Badan': 78.0,
+        'Z score BB/TB': '-2.35 SD',
+        'Status Gizi BB/TB (Wasting)': 'Gizi Kurang (Wasting)',
+        'Z-Score PB/U (TB/U)': '-1.45 SD',
+        'Status Gizi PB/U (Stunting)': 'Normal',
+        'Z-Score BB/U': '-2.15 SD',
+        'Status Gizi BB/U (Underweight)': 'BB Kurang (Underweight)',
+        'Naik Berat Badan': 'T',
+        'Keterangan Naik Berat Badan': 'T (Tidak Naik)',
+        'Status Outlier WHO': 'Normal',
+        'Nama Orang Tua': 'Siti Aminah / Rahmat',
+        'No Hp': '081299881122',
+        'Wilayah Kecamatan': 'Kepulauan Seribu Selatan',
+        'Kelurahan': 'Kelurahan Pulau Tidung',
+        'Puskesmas Kel. / Pustu': 'Puskesmas Kepulauan Seribu Selatan',
+        'Posyandu': 'Posyandu Mawar I'
+      },
+      {
+        'NIK': '3101024211240002',
+        'Nama': 'An. Maya Kusuma',
+        'Jenis Kelamin': 'P',
+        'Tanggal Lahir': '02/11/2024',
+        'Usia': '23 Bulan',
+        'Tanggal Ukur': '08/10/2026',
+        'Cara Ukur': 'Terlentang',
+        'Berat Badan': 7.2,
+        'Tinggi Badan': 72.5,
+        'Z score BB/TB': '-1.85 SD',
+        'Status Gizi BB/TB (Wasting)': 'Gizi Kurang (Wasting)',
+        'Z-Score PB/U (TB/U)': '-1.20 SD',
+        'Status Gizi PB/U (Stunting)': 'Normal',
+        'Z-Score BB/U': '-2.40 SD',
+        'Status Gizi BB/U (Underweight)': 'BB Kurang (Underweight)',
+        'Naik Berat Badan': 'T',
+        'Keterangan Naik Berat Badan': 'T (Tidak Naik)',
+        'Status Outlier WHO': 'Normal',
+        'Nama Orang Tua': 'Nurjanah / Hendra',
+        'No Hp': '081388776655',
+        'Wilayah Kecamatan': 'Kepulauan Seribu Selatan',
+        'Kelurahan': 'Kelurahan Pulau Pari',
+        'Puskesmas Kel. / Pustu': 'Puskesmas Pembantu Pulau Pari',
+        'Posyandu': 'Posyandu Melati I'
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(sampleData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Data_Sasaran_Balita');
+    XLSX.writeFile(workbook, 'Template_Excel_Balita_Bermasalah_Gizi_ePPGBM.xlsx');
   };
 
   const handleExport = () => {
     const headers = [
-      'ID Sasaran',
-      'Kode Sasaran (Anonim)',
-      'Inisial / Nama',
-      'NIK Balita',
-      'Tanggal Lahir',
+      'No',
+      'NIK',
+      'Nama',
       'Jenis Kelamin',
-      'Pulau',
-      'Posyandu',
-      'Bulan Pengukuran',
+      'Tanggal Lahir',
+      'Usia',
+      'Tanggal Ukur',
+      'Cara Ukur',
+      'Berat Badan',
+      'Tinggi Badan',
+      'Z score BB/TB',
+      'Status Gizi BB/TB (Wasting)',
+      'Z-Score PB/U (TB/U)',
+      'Status Gizi PB/U (Stunting)',
+      'Z-Score BB/U',
+      'Status Gizi BB/U (Underweight)',
+      'Naik Berat Badan',
+      'Keterangan Naik Berat Badan',
+      'Status Outlier WHO',
       'Nama Orang Tua',
-      'BB (kg)',
-      'TB (cm)',
-      'LiLA (cm)',
-      'Kategori Masalah Gizi',
-      'Tanggal Pantau Terakhir'
+      'No Hp',
+      'Wilayah Kecamatan',
+      'Kelurahan',
+      'Puskesmas Kel. / Pustu',
+      'Posyandu'
     ];
 
-    const rows = filteredSasaran.map(s => {
-      const p = pulauList.find(item => item.pulau_id === s.pulau_id);
-      return [
-        s.sasaran_id,
-        s.kode_sasaran,
-        s.inisial,
-        s.nik || '-',
-        s.tanggal_lahir,
-        s.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan',
-        p?.nama_pulau || s.pulau_id,
-        s.posyandu || '-',
-        s.bulan_pengukuran || '-',
-        s.nama_ortu || '-',
-        s.bb_terakhir || '-',
-        s.tb_terakhir || '-',
-        s.lila || '-',
-        s.kategori_masalah_terakhir || '-',
-        s.tanggal_pantau_terakhir || '-'
-      ];
-    });
+    const rows = filteredSasaran.map((s, idx) => [
+      idx + 1,
+      s.nik || '-',
+      s.inisial,
+      s.jenis_kelamin,
+      s.tanggal_lahir,
+      s.usia || '-',
+      s.tanggal_ukur || s.tanggal_pantau_terakhir || '-',
+      s.cara_ukur || 'Berdiri',
+      s.bb_terakhir || 0,
+      s.tb_terakhir || 0,
+      s.zscore_bbtb || '-',
+      s.status_gizi_bbtb || s.kategori_masalah_terakhir || '-',
+      s.zscore_tbu || '-',
+      s.status_gizi_tbu || '-',
+      s.zscore_bbu || '-',
+      s.status_gizi_bbu || '-',
+      s.naik_berat_badan || '-',
+      s.keterangan_naik_bb || '-',
+      s.status_outlier_who || 'Normal',
+      s.nama_ortu || '-',
+      s.no_hp || s.no_wa_ortu || '-',
+      s.wilayah_kecamatan || 'Kepulauan Seribu Selatan',
+      s.kelurahan_nama || 'Kelurahan Pulau Tidung',
+      s.puskesmas_pustu || s.unit_pelayanan || 'Puskesmas Kepulauan Seribu Selatan',
+      s.posyandu || '-'
+    ]);
 
-    exportToCSV(`Sasaran_Balita_Gizi_${filter.pulau_id}`, headers, rows);
-    storageService.addLog('EXPORT', 'SASARAN', 'EXPORT-ALL', `Ekspor ${rows.length} data sasaran balita`, 'SUCCESS');
+    exportToCSV(`Data_Sasaran_Balita_Bermasalah_Gizi_${filter.pulau_id}`, headers, rows);
   };
 
   // --- Handlers Import Excel ---
@@ -255,52 +436,6 @@ export const SasaranView: React.FC<SasaranViewProps> = ({
     setImportError('');
     setImportSuccessMsg('');
     setIsImportModalOpen(true);
-  };
-
-  const handleDownloadTemplate = () => {
-    const sampleData = [
-      {
-        'Kode Sasaran': 'BLT-TDG-091',
-        'Nama Balita': 'An. Rizky Pratama',
-        'NIK': '3101015509230001',
-        'Jenis Kelamin': 'L',
-        'Tanggal Lahir': '15/05/2024',
-        'Nama Orang Tua': 'Hendra / Siti',
-        'No WA Ortu': '081298765432',
-        'Alamat': 'Jl. Dermaga Pelabuhan No 12',
-        'RT/RW': 'RT 02 / RW 01',
-        'Pulau': 'Pulau Tidung',
-        'Posyandu': 'Posyandu Melati 1',
-        'Bulan Pengukuran': 'Oktober 2026',
-        'Berat Badan (kg)': 9.4,
-        'Tinggi Badan (cm)': 78.5,
-        'LiLA (cm)': 12.5,
-        'Status Gizi': 'Gizi Baik (Normal)'
-      },
-      {
-        'Kode Sasaran': 'BLT-PAR-092',
-        'Nama Balita': 'An. Zahra Aulia',
-        'NIK': '3101016208240002',
-        'Jenis Kelamin': 'P',
-        'Tanggal Lahir': '20/08/2024',
-        'Nama Orang Tua': 'Budi / Aminah',
-        'No WA Ortu': '081387654321',
-        'Alamat': 'Pantai Pasir Perawan',
-        'RT/RW': 'RT 01 / RW 02',
-        'Pulau': 'Pulau Pari',
-        'Posyandu': 'Posyandu Cempaka 2',
-        'Bulan Pengukuran': 'Oktober 2026',
-        'Berat Badan (kg)': 7.2,
-        'Tinggi Badan (cm)': 68.0,
-        'LiLA (cm)': 11.2,
-        'Status Gizi': 'Wasting (Kurus/Gizi Kurang)'
-      }
-    ];
-
-    const worksheet = XLSX.utils.json_to_sheet(sampleData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Data_Sasaran_Balita');
-    XLSX.writeFile(workbook, 'Template_Import_Sasaran_Balita_DermagaGizi.xlsx');
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -326,25 +461,32 @@ export const SasaranView: React.FC<SasaranViewProps> = ({
         }
 
         const headers: string[] = (rawJson[0] || []).map((h: any) => String(h || '').trim().toLowerCase());
-        
         const getIdx = (aliases: string[]) => headers.findIndex(h => aliases.some(a => h.includes(a)));
 
-        const colKode = getIdx(['kode']);
-        const colNama = getIdx(['nama', 'inisial', 'balita']);
         const colNik = getIdx(['nik']);
-        const colJK = getIdx(['jk', 'kelamin', 'gender', 'jenis']);
-        const colLahir = getIdx(['lahir', 'tanggal', 'tgl']);
-        const colOrtu = getIdx(['ortu', 'orang tua', 'ibu', 'ayah']);
-        const colNoWA = getIdx(['wa', 'hp', 'telepon', 'telp']);
-        const colAlamat = getIdx(['alamat', 'domisili']);
-        const colRtRw = getIdx(['rt', 'rw']);
-        const colPulau = getIdx(['pulau', 'wilayah']);
+        const colNama = getIdx(['nama', 'inisial', 'balita']);
+        const colJK = getIdx(['jenis kelamin', 'jk', 'kelamin', 'gender', 'sex']);
+        const colLahir = getIdx(['tanggal lahir', 'tgl lahir', 'lahir']);
+        const colUsia = getIdx(['usia', 'umur']);
+        const colTanggalUkur = getIdx(['tanggal ukur', 'tgl ukur', 'tanggal pantau']);
+        const colCaraUkur = getIdx(['cara ukur', 'posisi']);
+        const colBB = getIdx(['berat badan', 'berat', 'bb']);
+        const colTB = getIdx(['tinggi badan', 'tinggi', 'tb', 'panjang', 'pb']);
+        const colZScoreBBTB = getIdx(['z score bb/tb', 'z-score bb/tb', 'zscore bb/tb', 'bb/tb']);
+        const colStatusBBTB = getIdx(['status gizi bb/tb', 'wasting', 'gizi bb/tb']);
+        const colZScoreTBU = getIdx(['z-score pb/u', 'z-score tb/u', 'pb/u', 'tb/u']);
+        const colStatusTBU = getIdx(['status gizi pb/u', 'stunting', 'gizi pb/u', 'gizi tb/u']);
+        const colZScoreBBU = getIdx(['z-score bb/u', 'zscore bb/u', 'bb/u']);
+        const colStatusBBU = getIdx(['status gizi bb/u', 'underweight', 'gizi bb/u']);
+        const colNaikBB = getIdx(['naik berat badan', 'naik bb', 't/n', 'n/t']);
+        const colKetNaik = getIdx(['keterangan naik', 'ket naik']);
+        const colOutlier = getIdx(['outlier', 'status outlier']);
+        const colOrtu = getIdx(['nama orang tua', 'orang tua', 'ortu', 'ibu', 'ayah']);
+        const colNoHp = getIdx(['no hp', 'hp', 'no wa', 'wa', 'telepon', 'kontak']);
+        const colKecamatan = getIdx(['wilayah kecamatan', 'kecamatan']);
+        const colKelurahan = getIdx(['kelurahan', 'desa']);
+        const colPuskesmas = getIdx(['puskesmas', 'pustu', 'faskes']);
         const colPosyandu = getIdx(['posyandu', 'pos']);
-        const colBulan = getIdx(['bulan', 'periode', 'waktu']);
-        const colBB = getIdx(['berat', 'bb']);
-        const colTB = getIdx(['tinggi', 'tb', 'panjang']);
-        const colLiLA = getIdx(['lila', 'lingkar']);
-        const colStatus = getIdx(['status', 'gizi', 'kategori']);
 
         const results: Partial<SasaranBalita>[] = [];
 
@@ -360,43 +502,62 @@ export const SasaranView: React.FC<SasaranViewProps> = ({
 
           const bbVal = colBB >= 0 ? parseFloat(String(row[colBB]).replace(',', '.')) : 10.0;
           const tbVal = colTB >= 0 ? parseFloat(String(row[colTB]).replace(',', '.')) : 80.0;
-          const lilaVal = colLiLA >= 0 ? parseFloat(String(row[colLiLA]).replace(',', '.')) : undefined;
 
-          let statusGizi: KategoriMasalahGizi = 'Gizi Baik (Normal)';
-          if (colStatus >= 0 && row[colStatus]) {
-            const sg = String(row[colStatus]).toLowerCase();
-            if (sg.includes('buruk')) statusGizi = 'Gizi Buruk';
-            else if (sg.includes('kurang') || sg.includes('wasting')) statusGizi = 'Wasting (Kurus/Gizi Kurang)';
-            else if (sg.includes('stunting') || sg.includes('pendek')) statusGizi = 'Stunting (Pendek)';
-            else if (sg.includes('underweight') || sg.includes('bb kurang')) statusGizi = 'Underweight (BB Kurang)';
-            else if (sg.includes('lebih') || sg.includes('obesitas')) statusGizi = 'Risiko Gizi Lebih / Obesitas';
+          // Status Gizi
+          let statusGizi: KategoriMasalahGizi = 'Wasting (Kurus/Gizi Kurang)';
+          const statusRaw = colStatusBBTB >= 0 && row[colStatusBBTB] ? String(row[colStatusBBTB]).toLowerCase() : '';
+          const statusTbuRaw = colStatusTBU >= 0 && row[colStatusTBU] ? String(row[colStatusTBU]).toLowerCase() : '';
+          const statusBbuRaw = colStatusBBU >= 0 && row[colStatusBBU] ? String(row[colStatusBBU]).toLowerCase() : '';
+
+          if (statusRaw.includes('buruk')) statusGizi = 'Gizi Buruk';
+          else if (statusRaw.includes('obesitas')) statusGizi = 'Obesitas';
+          else if (statusRaw.includes('overweight') || statusRaw.includes('lebih')) statusGizi = 'Overweight';
+          else if (statusTbuRaw.includes('pendek') || statusTbuRaw.includes('stunting')) statusGizi = 'Stunting (Pendek)';
+          else if (statusBbuRaw.includes('kurang') || statusBbuRaw.includes('underweight')) statusGizi = 'Underweight (BB Kurang)';
+          else if (statusRaw.includes('kurang') || statusRaw.includes('wasting')) statusGizi = 'Wasting (Kurus/Gizi Kurang)';
+          else if (statusRaw.includes('baik') || statusRaw.includes('normal')) statusGizi = 'Gizi Baik (Normal)';
+
+          const posyanduStr = colPosyandu >= 0 && row[colPosyandu] ? String(row[colPosyandu]).trim() : 'Posyandu Mawar I';
+          const matchedPosyandu = posyanduList.find(pos => pos.nama_posyandu.toLowerCase().includes(posyanduStr.toLowerCase()));
+          const kelurahanStr = colKelurahan >= 0 && row[colKelurahan] ? String(row[colKelurahan]).trim() : 'Kelurahan Pulau Tidung';
+          
+          let targetPulauId = filter.pulau_id === 'ALL' ? 'PULAU-01' : filter.pulau_id;
+          if (matchedPosyandu && matchedPosyandu.pulau_id) {
+            targetPulauId = matchedPosyandu.pulau_id;
           }
 
-          const pulauStr = colPulau >= 0 ? String(row[colPulau] || '') : '';
-          const matchedPulau = pulauList.find(p => p.nama_pulau.toLowerCase().includes(pulauStr.toLowerCase())) || pulauList[0];
-          
-          const posyanduStr = colPosyandu >= 0 ? String(row[colPosyandu] || '') : '';
-          const matchedPosyandu = posyanduList.find(pos => pos.nama_posyandu.toLowerCase().includes(posyanduStr.toLowerCase())) || posyanduList[0];
-
           results.push({
-            kode_sasaran: colKode >= 0 && row[colKode] ? String(row[colKode]).trim() : undefined,
+            kode_sasaran: `BLT-${Date.now().toString().slice(-4)}-${i}`,
+            nik: colNik >= 0 && row[colNik] ? String(row[colNik]).trim() : `310101${Math.floor(1000000000 + Math.random() * 9000000000)}`,
             inisial: namaRaw.startsWith('An.') ? namaRaw : `An. ${namaRaw}`,
-            nik: colNik >= 0 ? String(row[colNik] || '').trim() : '',
             jenis_kelamin: jk,
             tanggal_lahir: colLahir >= 0 && row[colLahir] ? String(row[colLahir]).trim() : '01/01/2024',
-            nama_ortu: colOrtu >= 0 ? String(row[colOrtu] || '').trim() : '',
-            no_wa_ortu: colNoWA >= 0 ? String(row[colNoWA] || '').trim() : '',
-            alamat: colAlamat >= 0 ? String(row[colAlamat] || '').trim() : '',
-            rt_rw: colRtRw >= 0 ? String(row[colRtRw] || '').trim() : 'RT 01 / RW 01',
-            pulau_id: matchedPulau.pulau_id,
-            unit_pelayanan: matchedPulau.unit_pelayanan,
-            posyandu: posyanduStr || (matchedPosyandu ? matchedPosyandu.nama_posyandu : 'Posyandu Mawar I'),
-            bulan_pengukuran: colBulan >= 0 && row[colBulan] ? String(row[colBulan]).trim() : 'Oktober 2026',
+            usia: colUsia >= 0 && row[colUsia] ? String(row[colUsia]).trim() : '24 Bulan',
+            tanggal_ukur: colTanggalUkur >= 0 && row[colTanggalUkur] ? String(row[colTanggalUkur]).trim() : new Date().toLocaleDateString('id-ID'),
+            cara_ukur: colCaraUkur >= 0 && row[colCaraUkur] ? String(row[colCaraUkur]).trim() : 'Berdiri',
             bb_terakhir: !isNaN(bbVal) && bbVal > 0 ? bbVal : 10.0,
             tb_terakhir: !isNaN(tbVal) && tbVal > 0 ? tbVal : 80.0,
-            lila: !isNaN(lilaVal!) && lilaVal! > 0 ? lilaVal : undefined,
+            zscore_bbtb: colZScoreBBTB >= 0 && row[colZScoreBBTB] ? String(row[colZScoreBBTB]).trim() : '-2.10 SD',
+            status_gizi_bbtb: colStatusBBTB >= 0 && row[colStatusBBTB] ? String(row[colStatusBBTB]).trim() : statusGizi,
+            zscore_tbu: colZScoreTBU >= 0 && row[colZScoreTBU] ? String(row[colZScoreTBU]).trim() : '-1.50 SD',
+            status_gizi_tbu: colStatusTBU >= 0 && row[colStatusTBU] ? String(row[colStatusTBU]).trim() : 'Normal',
+            zscore_bbu: colZScoreBBU >= 0 && row[colZScoreBBU] ? String(row[colZScoreBBU]).trim() : '-2.00 SD',
+            status_gizi_bbu: colStatusBBU >= 0 && row[colStatusBBU] ? String(row[colStatusBBU]).trim() : 'BB Kurang (Underweight)',
+            naik_berat_badan: colNaikBB >= 0 && row[colNaikBB] ? String(row[colNaikBB]).trim() : 'T',
+            keterangan_naik_bb: colKetNaik >= 0 && row[colKetNaik] ? String(row[colKetNaik]).trim() : 'T (Tidak Naik)',
+            status_outlier_who: colOutlier >= 0 && row[colOutlier] ? String(row[colOutlier]).trim() : 'Normal',
+            nama_ortu: colOrtu >= 0 && row[colOrtu] ? String(row[colOrtu]).trim() : '',
+            no_hp: colNoHp >= 0 && row[colNoHp] ? String(row[colNoHp]).trim() : '',
+            no_wa_ortu: colNoHp >= 0 && row[colNoHp] ? String(row[colNoHp]).trim() : '',
+            wilayah_kecamatan: colKecamatan >= 0 && row[colKecamatan] ? String(row[colKecamatan]).trim() : 'Kepulauan Seribu Selatan',
+            kelurahan_nama: kelurahanStr,
+            puskesmas_pustu: colPuskesmas >= 0 && row[colPuskesmas] ? String(row[colPuskesmas]).trim() : 'Puskesmas Kepulauan Seribu Selatan',
+            posyandu: posyanduStr,
+            pulau_id: targetPulauId,
+            unit_pelayanan: 'Puskesmas Kepulauan Seribu Selatan',
             kategori_masalah_terakhir: statusGizi,
-            tanggal_pantau_terakhir: new Date().toLocaleDateString('id-ID')
+            tanggal_pantau_terakhir: new Date().toLocaleDateString('id-ID'),
+            bulan_pengukuran: defaultBulan
           });
         }
 
@@ -421,11 +582,11 @@ export const SasaranView: React.FC<SasaranViewProps> = ({
     try {
       const result = await apiService.importSasaranBatch(parsedData);
       setIsImporting(false);
-      setImportSuccessMsg(`Berhasil mengimpor ${result.count} data balita ke sistem!`);
+      setImportSuccessMsg(`Berhasil mengimpor ${result.count} data balita! Kasus balita bermasalah gizi otomatis didaftarkan ke Daftar Tindak Lanjut lintas sektor.`);
       onRefreshData();
       setTimeout(() => {
         setIsImportModalOpen(false);
-      }, 1500);
+      }, 1800);
     } catch (err: any) {
       setIsImporting(false);
       setImportError('Gagal menyimpan hasil import: ' + err.message);
@@ -435,670 +596,1151 @@ export const SasaranView: React.FC<SasaranViewProps> = ({
   return (
     <div className="space-y-4">
       
-      {/* Title & Actions */}
+      {/* 1. Header & Actions Bar */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-base md:text-lg font-bold text-slate-900 dark:text-white">
-              Registrasi & Pemantauan Sasaran Balita
-            </h1>
-            <span className="text-xs bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 font-semibold px-2 py-0.5 rounded-full font-mono tabular-nums">
-              {filteredSasaran.length} Balita
-            </span>
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300 rounded-2xl">
+              <Baby className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base md:text-lg font-bold text-slate-900 dark:text-white">
+                  Data Sasaran Balita Bermasalah Gizi
+                </h1>
+                <span className="text-xs bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 font-bold px-2.5 py-0.5 rounded-full font-mono tabular-nums">
+                  {filteredSasaran.length} Balita
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Tabel rekaman antropometri balita bermasalah gizi sesuai standar 24 kolom e-PPGBM Posyandu.
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Pencatatan antropometri balita per Posyandu & Bulan Pengukuran dengan dukungan import Excel.
-          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Tombol Unduh Template Excel e-PPGBM */}
+          <button
+            type="button"
+            onClick={handleDownloadTemplate}
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            title="Unduh Format Template Excel 24 Kolom e-PPGBM"
+          >
+            <FileDown className="w-4 h-4 text-emerald-600" />
+            <span>Format Excel</span>
+          </button>
+
           {/* Tombol Import Excel */}
           {canEdit && (
             <button
+              type="button"
               onClick={handleOpenImportModal}
-              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-              title="Import Data Balita dari File Excel (.xlsx / .xls / .csv)"
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Import Data Balita dari File Excel"
             >
               <FileSpreadsheet className="w-4 h-4" />
               <span>Import Excel</span>
             </button>
           )}
 
+          {/* Tombol Ekspor CSV */}
           <button
+            type="button"
             onClick={handleExport}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
           >
-            <Download className="w-4 h-4" />
+            <Download className="w-4 h-4 text-sky-600" />
             <span>Ekspor CSV</span>
           </button>
 
+          {/* Tombol Registrasi Baru */}
           {canEdit && (
             <button
+              type="button"
               onClick={handleOpenCreate}
-              className="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-2 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Registrasi Balita Baru</span>
+              <span>+ Registrasi Balita</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs flex items-center justify-between gap-4 text-xs">
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+      {/* 2. Filter & Pencarian Bar */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
+        
+        {/* Search Input */}
+        <div className="relative flex-1 min-w-[240px] max-w-md">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Cari kode sasaran, inisial, posyandu, atau periode..."
+            placeholder="Cari NIK, Nama balita, nama orang tua, atau posyandu..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setCurrentPage(1);
+            }}
             className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-sky-500 text-xs dark:text-white"
           />
         </div>
-        <div className="text-slate-500 dark:text-slate-400 text-xs">
-          Pulau aktif: <span className="font-semibold text-slate-800 dark:text-slate-200">{filter.pulau_id === 'ALL' ? 'Semua Pulau' : pulauList.find(p => p.pulau_id === filter.pulau_id)?.nama_pulau}</span>
-        </div>
-      </div>
 
-      {/* Grid Sasaran Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredSasaran.map(s => {
-          const pulau = pulauList.find(p => p.pulau_id === s.pulau_id);
-          const badge = getKategoriGiziBadge(s.kategori_masalah_terakhir);
-
-          return (
-            <div 
-              key={s.sasaran_id}
-              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs hover:border-sky-300 hover:shadow-sm transition-all text-xs flex flex-col justify-between"
+        {/* Filter Dropdowns */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          
+          {/* Filter Pulau */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400 font-medium">Pulau:</span>
+            <select
+              value={filter.pulau_id}
+              onChange={(e) => {
+                setFilter(prev => ({ ...prev, pulau_id: e.target.value }));
+                setCurrentPage(1);
+              }}
+              className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none font-medium cursor-pointer"
             >
-              <div>
-                <div className="flex items-start justify-between pb-2.5 border-b border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-xl bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 flex items-center justify-center font-bold">
-                      <Baby className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="font-mono font-bold text-slate-900 dark:text-white text-sm">{s.kode_sasaran}</div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400">{s.inisial} · {s.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan'}</div>
-                    </div>
-                  </div>
+              <option value="ALL">Semua Pulau</option>
+              {pulauList.map(p => (
+                <option key={p.pulau_id} value={p.pulau_id}>{p.nama_pulau}</option>
+              ))}
+            </select>
+          </div>
 
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1.5 ${
-                    s.kategori_masalah_terakhir === 'Gizi Baik (Normal)' 
-                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' 
-                      : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
-                    <span className="font-medium truncate max-w-[110px]">{s.kategori_masalah_terakhir || 'Normal'}</span>
-                  </span>
-                </div>
+          {/* Filter Posyandu */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400 font-medium">Posyandu:</span>
+            <select
+              value={selectedPosyanduFilter}
+              onChange={(e) => {
+                setSelectedPosyanduFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none font-medium cursor-pointer"
+            >
+              <option value="ALL">Semua Posyandu</option>
+              {posyanduList.map(pos => (
+                <option key={pos.posyandu_id} value={pos.nama_posyandu}>{pos.nama_posyandu}</option>
+              ))}
+            </select>
+          </div>
 
-                {/* Data Detail Body */}
-                <div className="py-3 space-y-2 text-slate-600 dark:text-slate-300">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-400">Pulau Domisili:</span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">{pulau?.nama_pulau || s.pulau_id}</span>
-                  </div>
+          {/* Filter Status Gizi */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400 font-medium">Masalah Gizi:</span>
+            <select
+              value={selectedStatusGiziFilter}
+              onChange={(e) => {
+                setSelectedStatusGiziFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none font-medium cursor-pointer"
+            >
+              <option value="ALL">Semua Masalah</option>
+              <option value="Wasting">Wasting (Gizi Kurang)</option>
+              <option value="Stunting">Stunting (Pendek)</option>
+              <option value="Underweight">Underweight (BB Kurang)</option>
+              <option value="Gizi Buruk">Gizi Buruk</option>
+              <option value="Overweight">Overweight</option>
+              <option value="Obesitas">Obesitas</option>
+            </select>
+          </div>
 
-                  {/* Posyandu & Bulan Pengukuran */}
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-400">Posyandu:</span>
-                    <span className="font-semibold text-sky-700 dark:text-sky-400 truncate max-w-[170px]" title={s.posyandu || '-'}>
-                      {s.posyandu || 'Posyandu Mawar I'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-400">Bulan Pengukuran:</span>
-                    <span className="font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 px-1.5 py-0.5 rounded text-[10px]">
-                      {s.bulan_pengukuran || 'Oktober 2026'}
-                    </span>
-                  </div>
+        </div>
 
-                  <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800 text-center">
-                    <div className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800">
-                      <div className="text-[10px] text-slate-400">BB (kg)</div>
-                      <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{s.bb_terakhir ? `${s.bb_terakhir}` : '-'}</div>
-                    </div>
-                    <div className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800">
-                      <div className="text-[10px] text-slate-400">TB (cm)</div>
-                      <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{s.tb_terakhir ? `${s.tb_terakhir}` : '-'}</div>
-                    </div>
-                    <div className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800">
-                      <div className="text-[10px] text-slate-400">LiLA (cm)</div>
-                      <div className="font-mono font-bold text-slate-800 dark:text-slate-200">{s.lila ? `${s.lila}` : '-'}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Card Footer */}
-              <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-                <span>Pantau: {s.tanggal_pantau_terakhir || s.tanggal_registrasi}</span>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => handleSendWA(s)}
-                    className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 rounded-lg transition-colors cursor-pointer"
-                    title="Kirim Notifikasi WhatsApp ke Kader/Lintas Sektor"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleOpenDetail(s)}
-                    className="p-1 text-slate-500 hover:text-sky-700 hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                    title="Lihat Detail"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </button>
-                  {canEdit && (
-                    <button
-                      onClick={() => handleOpenEdit(s)}
-                      className="p-1 text-slate-500 hover:text-sky-700 hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                      title="Update Antropometri"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                  )}
-
-                  {/* Tombol Hapus khusus Tenaga Gizi & Admin */}
-                  {canDelete && (
-                    <button
-                      onClick={() => setDeleteConfirmModal({ isOpen: true, sasaran: s })}
-                      className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/60 rounded-lg transition-colors cursor-pointer"
-                      title="Hapus Data Sasaran Balita (Khusus Tenaga Gizi & Admin)"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
       </div>
 
-      {/* Modal Form Sasaran (Registrasi & Antropometri) */}
+      {/* 3. TABEL DATA SASARAN BALITA BERMASALAH (PRESISI 24 KOLOM SESUAI EXCEL) */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider whitespace-nowrap">
+                <th className="py-3 px-3 text-center sticky left-0 z-10 bg-slate-50 dark:bg-slate-800/90 shadow-xs w-10">No</th>
+                <th className="py-3 px-3 min-w-[140px]">NIK</th>
+                <th className="py-3 px-3 min-w-[160px]">Nama</th>
+                <th className="py-3 px-2 text-center w-12">JK</th>
+                <th className="py-3 px-3 min-w-[100px]">Tanggal Lahir</th>
+                <th className="py-3 px-3 min-w-[90px]">Usia</th>
+                <th className="py-3 px-3 min-w-[100px]">Tanggal Ukur</th>
+                <th className="py-3 px-3 min-w-[95px]">Cara Ukur</th>
+                <th className="py-3 px-3 text-right min-w-[90px]">Berat Badan</th>
+                <th className="py-3 px-3 text-right min-w-[90px]">Tinggi Badan</th>
+                <th className="py-3 px-3 text-center min-w-[100px]">Z score BB/TB</th>
+                <th className="py-3 px-3 min-w-[160px]">Status Gizi BB/TB (Wasting)</th>
+                <th className="py-3 px-3 text-center min-w-[110px]">Z-Score PB/U (TB/U)</th>
+                <th className="py-3 px-3 min-w-[160px]">Status Gizi PB/U (Stunting)</th>
+                <th className="py-3 px-3 text-center min-w-[100px]">Z-Score BB/U</th>
+                <th className="py-3 px-3 min-w-[170px]">Status Gizi BB/U (Underweight)</th>
+                <th className="py-3 px-2 text-center w-24">Naik BB</th>
+                <th className="py-3 px-3 min-w-[140px]">Keterangan Naik</th>
+                <th className="py-3 px-3 text-center min-w-[120px]">Status Outlier WHO</th>
+                <th className="py-3 px-3 min-w-[170px]">Nama Orang Tua</th>
+                <th className="py-3 px-3 min-w-[120px]">No Hp</th>
+                <th className="py-3 px-3 min-w-[150px]">Wilayah Kecamatan</th>
+                <th className="py-3 px-3 min-w-[140px]">Kelurahan</th>
+                <th className="py-3 px-3 min-w-[170px]">Puskesmas Kel. / Pustu</th>
+                <th className="py-3 px-3 min-w-[140px]">Posyandu</th>
+                <th className="py-3 px-3 text-center sticky right-0 z-10 bg-slate-50 dark:bg-slate-800/90 shadow-xs min-w-[110px]">Aksi</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+              {paginatedSasaran.length === 0 ? (
+                <tr>
+                  <td colSpan={26} className="py-16 text-center text-slate-400">
+                    Tidak ada data balita bermasalah gizi yang sesuai dengan filter pencarian.
+                  </td>
+                </tr>
+              ) : (
+                paginatedSasaran.map((s, idx) => {
+                  const rowNumber = (currentPage - 1) * pageSize + idx + 1;
+                  const pulau = pulauList.find(p => p.pulau_id === s.pulau_id);
+                  const isNaik = (s.naik_berat_badan || '').toUpperCase() === 'N';
+                  const isWasting = (s.status_gizi_bbtb || s.kategori_masalah_terakhir || '').toLowerCase().includes('kurang') || 
+                    (s.status_gizi_bbtb || s.kategori_masalah_terakhir || '').toLowerCase().includes('wasting') ||
+                    (s.status_gizi_bbtb || s.kategori_masalah_terakhir || '').toLowerCase().includes('buruk');
+                  const isStunting = (s.status_gizi_tbu || s.kategori_masalah_terakhir || '').toLowerCase().includes('pendek');
+                  const isUnderweight = (s.status_gizi_bbu || s.kategori_masalah_terakhir || '').toLowerCase().includes('kurang');
+
+                  return (
+                    <tr 
+                      key={s.sasaran_id} 
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors"
+                    >
+                      {/* 1. No */}
+                      <td className="py-3 px-3 text-center text-slate-400 font-mono text-[11px] sticky left-0 bg-white dark:bg-slate-900 shadow-2xs">
+                        {rowNumber}
+                      </td>
+
+                      {/* 2. NIK */}
+                      <td className="py-3 px-3 font-mono font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                        {s.nik || '-'}
+                      </td>
+
+                      {/* 3. Nama */}
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <div className="font-bold text-slate-900 dark:text-white">
+                          {s.inisial}
+                        </div>
+                        <div className="text-[10px] text-sky-600 dark:text-sky-400 font-mono">
+                          {s.kode_sasaran}
+                        </div>
+                      </td>
+
+                      {/* 4. Jenis Kelamin */}
+                      <td className="py-3 px-2 text-center whitespace-nowrap">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          s.jenis_kelamin === 'L' 
+                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' 
+                            : 'bg-pink-100 text-pink-700 dark:bg-pink-950 dark:text-pink-300'
+                        }`}>
+                          {s.jenis_kelamin}
+                        </span>
+                      </td>
+
+                      {/* 5. Tanggal Lahir */}
+                      <td className="py-3 px-3 font-mono text-[11px] text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        {s.tanggal_lahir}
+                      </td>
+
+                      {/* 6. Usia */}
+                      <td className="py-3 px-3 font-medium text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                        {s.usia || '-'}
+                      </td>
+
+                      {/* 7. Tanggal Ukur */}
+                      <td className="py-3 px-3 font-mono text-[11px] text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        {s.tanggal_ukur || s.tanggal_pantau_terakhir || '-'}
+                      </td>
+
+                      {/* 8. Cara Ukur */}
+                      <td className="py-3 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        {s.cara_ukur || 'Berdiri'}
+                      </td>
+
+                      {/* 9. Berat Badan */}
+                      <td className="py-3 px-3 text-right font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                        {s.bb_terakhir ? `${s.bb_terakhir} kg` : '-'}
+                      </td>
+
+                      {/* 10. Tinggi Badan */}
+                      <td className="py-3 px-3 text-right font-mono font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                        {s.tb_terakhir ? `${s.tb_terakhir} cm` : '-'}
+                      </td>
+
+                      {/* 11. Z score BB/TB */}
+                      <td className="py-3 px-3 text-center font-mono text-[11px] font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                        {s.zscore_bbtb || '-'}
+                      </td>
+
+                      {/* 12. Status Gizi BB/TB (Wasting) */}
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          isWasting
+                            ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                            : (s.status_gizi_bbtb || '').includes('Obesitas') || (s.status_gizi_bbtb || '').includes('Overweight')
+                              ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'
+                              : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                        }`}>
+                          {s.status_gizi_bbtb || s.kategori_masalah_terakhir || 'Normal'}
+                        </span>
+                      </td>
+
+                      {/* 13. Z-Score PB/U (TB/U) */}
+                      <td className="py-3 px-3 text-center font-mono text-[11px] font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                        {s.zscore_tbu || '-'}
+                      </td>
+
+                      {/* 14. Status Gizi PB/U (Stunting) */}
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          isStunting
+                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                            : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                        }`}>
+                          {s.status_gizi_tbu || 'Normal'}
+                        </span>
+                      </td>
+
+                      {/* 15. Z-Score BB/U */}
+                      <td className="py-3 px-3 text-center font-mono text-[11px] font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                        {s.zscore_bbu || '-'}
+                      </td>
+
+                      {/* 16. Status Gizi BB/U (Underweight) */}
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          isUnderweight
+                            ? 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300 border border-orange-200 dark:border-orange-800'
+                            : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                        }`}>
+                          {s.status_gizi_bbu || 'Normal'}
+                        </span>
+                      </td>
+
+                      {/* 17. Naik Berat Badan */}
+                      <td className="py-3 px-2 text-center whitespace-nowrap">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                          isNaik 
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' 
+                            : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                        }`}>
+                          {s.naik_berat_badan || 'T'}
+                        </span>
+                      </td>
+
+                      {/* 18. Keterangan Naik Berat Badan */}
+                      <td className="py-3 px-3 text-slate-700 dark:text-slate-300 whitespace-nowrap text-[11px]">
+                        {s.keterangan_naik_bb || (isNaik ? 'N (Naik)' : 'T (Tidak Naik)')}
+                      </td>
+
+                      {/* 19. Status Outlier WHO */}
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                          {s.status_outlier_who || 'Normal'}
+                        </span>
+                      </td>
+
+                      {/* 20. Nama Orang Tua */}
+                      <td className="py-3 px-3 text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                        {s.nama_ortu || '-'}
+                      </td>
+
+                      {/* 21. No Hp */}
+                      <td className="py-3 px-3 font-mono text-[11px] text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                        {s.no_hp || s.no_wa_ortu || '-'}
+                      </td>
+
+                      {/* 22. Wilayah Kecamatan */}
+                      <td className="py-3 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        {s.wilayah_kecamatan || 'Kepulauan Seribu Selatan'}
+                      </td>
+
+                      {/* 23. Kelurahan */}
+                      <td className="py-3 px-3 font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                        {s.kelurahan_nama || pulau?.nama_pulau || 'Kelurahan Pulau Tidung'}
+                      </td>
+
+                      {/* 24. Puskesmas Kel. / Pustu */}
+                      <td className="py-3 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        {s.puskesmas_pustu || s.unit_pelayanan || 'Puskesmas Kepulauan Seribu Selatan'}
+                      </td>
+
+                      {/* 25. Posyandu */}
+                      <td className="py-3 px-3 whitespace-nowrap">
+                        <span className="font-semibold text-sky-700 dark:text-sky-400">
+                          {s.posyandu || 'Posyandu Mawar I'}
+                        </span>
+                      </td>
+
+                      {/* 26. Aksi (Sticky Right) */}
+                      <td className="py-3 px-3 text-center whitespace-nowrap sticky right-0 bg-white dark:bg-slate-900 shadow-2xs">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDetail(s)}
+                            className="p-1 text-slate-500 hover:text-sky-600 hover:bg-sky-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                            title="Lihat Detail Balita"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEdit(s)}
+                              className="p-1 text-slate-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                              title="Edit Antropometri Balita"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleSendWA(s)}
+                            className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                            title="Kirim Notifikasi Kasus Balita ke WhatsApp"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                          </button>
+
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={() => setDeleteConfirmModal({ isOpen: true, sasaran: s })}
+                              className="p-1 text-rose-500 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                              title="Hapus Data Balita (Wewenang Tenaga Gizi & Admin)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination Bar */}
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <span>Tampilkan</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg outline-none cursor-pointer"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+            </select>
+            <span>data per halaman • Total <strong>{filteredSasaran.length}</strong> balita</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 self-end sm:self-auto">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-30 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+
+            <span className="font-mono text-xs px-2 font-medium">
+              Halaman {currentPage} dari {totalPages}
+            </span>
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-30 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      {/* MODAL REGISTRASI & EDIT SASARAN BALITA */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 dark:border-slate-800">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200 dark:border-slate-800 text-xs">
+            
             <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">
-              <h3 className="font-bold text-slate-900 dark:text-white text-base">
-                Registrasi & Antropometri Balita
-              </h3>
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300 rounded-xl">
+                  <Baby className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                    {modalMode === 'create' ? 'Registrasi Balita Bermasalah Gizi' : `Edit Data Balita: ${activeSasaran.inisial}`}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Lengkapi identitas balita dan data antropometri standar e-PPGBM Posyandu
+                  </p>
+                </div>
+              </div>
               <button 
+                type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="p-5 space-y-4 text-xs">
+            <form onSubmit={handleSave} className="p-5 space-y-4">
               
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Kode Sasaran Anonim *</label>
-                  <input
-                    type="text"
-                    value={activeSasaran.kode_sasaran || ''}
-                    onChange={(e) => setActiveSasaran(prev => ({ ...prev, kode_sasaran: e.target.value }))}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono text-xs dark:text-white"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Inisial / Nama Balita *</label>
-                  <input
-                    type="text"
-                    value={activeSasaran.inisial || ''}
-                    onChange={(e) => setActiveSasaran(prev => ({ ...prev, inisial: e.target.value }))}
-                    placeholder="Contoh: An. MF"
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white"
-                    required
-                  />
-                </div>
-              </div>
+              {/* Bagian 1: Identitas Balita & Wilayah */}
+              <div className="space-y-3">
+                <span className="font-bold text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1.5 pb-1 border-b border-slate-100 dark:border-slate-800">
+                  <UserIcon className="w-3.5 h-3.5 text-sky-600" />
+                  <span>1. Identitas Pasien & Wilayah Posyandu</span>
+                </span>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">NIK Balita (16 Digit)</label>
-                  <input
-                    type="text"
-                    maxLength={16}
-                    value={activeSasaran.nik || ''}
-                    onChange={(e) => setActiveSasaran(prev => ({ ...prev, nik: e.target.value }))}
-                    placeholder="3101xxxxxxxxxxxx"
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono text-xs dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Nama Orang Tua / Ibu</label>
-                  <input
-                    type="text"
-                    value={activeSasaran.nama_ortu || ''}
-                    onChange={(e) => setActiveSasaran(prev => ({ ...prev, nama_ortu: e.target.value }))}
-                    placeholder="Nama Ayah / Ibu"
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white"
-                  />
-                </div>
-              </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">NIK (16 Digit) *</label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={16}
+                      value={activeSasaran.nik || ''}
+                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, nik: e.target.value }))}
+                      placeholder="Contoh: 3101011405240001"
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono text-xs"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tanggal Lahir</label>
-                  <input
-                    type="text"
-                    value={activeSasaran.tanggal_lahir || ''}
-                    onChange={(e) => setActiveSasaran(prev => ({ ...prev, tanggal_lahir: e.target.value }))}
-                    placeholder="DD/MM/YYYY"
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono text-xs dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Jenis Kelamin</label>
-                  <select
-                    value={activeSasaran.jenis_kelamin || 'L'}
-                    onChange={(e) => setActiveSasaran(prev => ({ ...prev, jenis_kelamin: e.target.value as any }))}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white"
-                  >
-                    <option value="L">Laki-laki</option>
-                    <option value="P">Perempuan</option>
-                  </select>
-                </div>
-              </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Nama Lengkap Balita *</label>
+                    <input
+                      type="text"
+                      required
+                      value={activeSasaran.inisial || ''}
+                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, inisial: e.target.value }))}
+                      placeholder="Nama balita (cth: An. Rizky)"
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold"
+                    />
+                  </div>
 
-              {/* Pulau & Posyandu */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Pulau Domisili *</label>
-                  <select
-                    value={activeSasaran.pulau_id || ''}
-                    onChange={(e) => {
-                      const pid = e.target.value;
-                      const p = pulauList.find(item => item.pulau_id === pid);
-                      const matchedPos = posyanduList.find(pos => pos.pulau_id === pid);
-                      setActiveSasaran(prev => ({ 
-                        ...prev, 
-                        pulau_id: pid,
-                        unit_pelayanan: p ? p.unit_pelayanan : prev.unit_pelayanan,
-                        posyandu: matchedPos ? matchedPos.nama_posyandu : prev.posyandu
-                      }));
-                    }}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white"
-                    required
-                  >
-                    {pulauList.map(p => (
-                      <option key={p.pulau_id} value={p.pulau_id}>{p.nama_pulau}</option>
-                    ))}
-                  </select>
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Jenis Kelamin *</label>
+                    <select
+                      value={activeSasaran.jenis_kelamin || 'L'}
+                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, jenis_kelamin: e.target.value as 'L' | 'P' }))}
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold"
+                    >
+                      <option value="L">Laki-laki (L)</option>
+                      <option value="P">Perempuan (P)</option>
+                    </select>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Posyandu *</label>
-                  <select
-                    value={activeSasaran.posyandu || ''}
-                    onChange={(e) => setActiveSasaran(prev => ({ ...prev, posyandu: e.target.value }))}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white"
-                    required
-                  >
-                    {posyanduList
-                      .filter(pos => !activeSasaran.pulau_id || pos.pulau_id === activeSasaran.pulau_id)
-                      .map(pos => (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tanggal Lahir *</label>
+                    <input
+                      type="text"
+                      required
+                      value={activeSasaran.tanggal_lahir || ''}
+                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, tanggal_lahir: e.target.value }))}
+                      placeholder="DD/MM/YYYY"
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Usia Balita</label>
+                    <input
+                      type="text"
+                      value={activeSasaran.usia || ''}
+                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, usia: e.target.value }))}
+                      placeholder="Contoh: 24 Bulan"
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Posyandu Pelapor *</label>
+                    <select
+                      value={activeSasaran.posyandu || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const matchPos = posyanduList.find(pos => pos.nama_posyandu === val);
+                        setActiveSasaran(prev => ({
+                          ...prev,
+                          posyandu: val,
+                          pulau_id: matchPos ? matchPos.pulau_id : prev.pulau_id,
+                          kelurahan_nama: matchPos ? matchPos.kelurahan_nama : prev.kelurahan_nama
+                        }));
+                      }}
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-sky-700 dark:text-sky-300"
+                    >
+                      {posyanduList.map(pos => (
                         <option key={pos.posyandu_id} value={pos.nama_posyandu}>
-                          {pos.nama_posyandu} ({pos.rw || pos.rt})
+                          {pos.nama_posyandu} ({pos.kelurahan_nama})
                         </option>
                       ))}
-                    {/* Fallback option */}
-                    <option value="Posyandu Mawar I">Posyandu Mawar I</option>
-                    <option value="Posyandu Melati 2">Posyandu Melati 2</option>
-                    <option value="Posyandu Cempaka 3">Posyandu Cempaka 3</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Bulan Pengukuran */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Bulan Pengukuran *
-                  </label>
-                  <select
-                    value={activeSasaran.bulan_pengukuran || defaultBulan}
-                    onChange={(e) => setActiveSasaran(prev => ({ ...prev, bulan_pengukuran: e.target.value }))}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white font-semibold text-sky-800 dark:text-sky-300"
-                    required
-                  >
-                    {bulanOptions.map(b => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
+                    </select>
+                  </div>
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Tanggal Pengukuran
-                  </label>
-                  <input
-                    type="text"
-                    value={activeSasaran.tanggal_pantau_terakhir || new Date().toLocaleDateString('id-ID')}
-                    onChange={(e) => setActiveSasaran(prev => ({ ...prev, tanggal_pantau_terakhir: e.target.value }))}
-                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono text-xs dark:text-white"
-                  />
-                </div>
-              </div>
-
-              {/* Antropometri */}
-              <div className="p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl space-y-3">
-                <div className="font-bold text-slate-700 dark:text-slate-200">Hasil Pengukuran Antropometri</div>
-                <div className="grid grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1 text-[11px]">Berat Badan (kg)</label>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Nama Orang Tua</label>
+                    <input
+                      type="text"
+                      value={activeSasaran.nama_ortu || ''}
+                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, nama_ortu: e.target.value }))}
+                      placeholder="Ayah / Ibu"
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">No HP / WhatsApp Ortu</label>
+                    <input
+                      type="text"
+                      value={activeSasaran.no_hp || activeSasaran.no_wa_ortu || ''}
+                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, no_hp: e.target.value, no_wa_ortu: e.target.value }))}
+                      placeholder="0812xxxxxxxx"
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Kelurahan</label>
+                    <input
+                      type="text"
+                      value={activeSasaran.kelurahan_nama || ''}
+                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, kelurahan_nama: e.target.value }))}
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Bagian 2: Hasil Pengukuran Antropometri & Z-Score WHO */}
+              <div className="space-y-3 pt-2">
+                <span className="font-bold text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1.5 pb-1 border-b border-slate-100 dark:border-slate-800">
+                  <Scale className="w-3.5 h-3.5 text-amber-600" />
+                  <span>2. Hasil Pengukuran Antropometri & Status Gizi 3 Indeks</span>
+                </span>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tanggal Ukur</label>
+                    <input
+                      type="text"
+                      value={activeSasaran.tanggal_ukur || ''}
+                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, tanggal_ukur: e.target.value }))}
+                      placeholder="DD/MM/YYYY"
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Cara Ukur</label>
+                    <select
+                      value={activeSasaran.cara_ukur || 'Berdiri'}
+                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, cara_ukur: e.target.value }))}
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs"
+                    >
+                      <option value="Berdiri">Berdiri</option>
+                      <option value="Terlentang">Terlentang</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Berat Badan (kg) *</label>
                     <input
                       type="number"
                       step="0.1"
-                      value={activeSasaran.bb_terakhir || ''}
+                      required
+                      value={activeSasaran.bb_terakhir ?? ''}
                       onChange={(e) => setActiveSasaran(prev => ({ ...prev, bb_terakhir: parseFloat(e.target.value) || 0 }))}
-                      className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-xs dark:text-white"
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono text-xs font-bold"
                     />
                   </div>
+
                   <div>
-                    <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1 text-[11px]">Tinggi / Panjang (cm)</label>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tinggi Badan (cm) *</label>
                     <input
                       type="number"
                       step="0.1"
-                      value={activeSasaran.tb_terakhir || ''}
+                      required
+                      value={activeSasaran.tb_terakhir ?? ''}
                       onChange={(e) => setActiveSasaran(prev => ({ ...prev, tb_terakhir: parseFloat(e.target.value) || 0 }))}
-                      className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-xs dark:text-white"
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-mono text-xs font-bold"
                     />
                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block font-medium text-slate-600 dark:text-slate-400 mb-1 text-[11px]">LiLA (cm)</label>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Z-Score BB/TB & Status Wasting</label>
                     <input
-                      type="number"
-                      step="0.1"
-                      value={activeSasaran.lila || ''}
-                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, lila: parseFloat(e.target.value) || 0 }))}
-                      placeholder="Contoh: 12.5"
-                      className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono text-xs dark:text-white"
+                      type="text"
+                      value={activeSasaran.zscore_bbtb || ''}
+                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, zscore_bbtb: e.target.value }))}
+                      placeholder="Contoh: -2.35 SD"
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono mb-1"
                     />
+                    <select
+                      value={activeSasaran.status_gizi_bbtb || 'Gizi Kurang (Wasting)'}
+                      onChange={(e) => setActiveSasaran(prev => ({ 
+                        ...prev, 
+                        status_gizi_bbtb: e.target.value,
+                        kategori_masalah_terakhir: e.target.value as any
+                      }))}
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-rose-600"
+                    >
+                      <option value="Gizi Kurang (Wasting)">Gizi Kurang (Wasting)</option>
+                      <option value="Gizi Buruk">Gizi Buruk</option>
+                      <option value="Gizi Baik (Normal)">Gizi Baik (Normal)</option>
+                      <option value="Overweight">Overweight</option>
+                      <option value="Obesitas">Obesitas</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Z-Score PB/U (TB/U) & Stunting</label>
+                    <input
+                      type="text"
+                      value={activeSasaran.zscore_tbu || ''}
+                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, zscore_tbu: e.target.value }))}
+                      placeholder="Contoh: -2.80 SD"
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono mb-1"
+                    />
+                    <select
+                      value={activeSasaran.status_gizi_tbu || 'Normal'}
+                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, status_gizi_tbu: e.target.value }))}
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-amber-600"
+                    >
+                      <option value="Normal">Normal</option>
+                      <option value="Pendek (Stunting)">Pendek (Stunting)</option>
+                      <option value="Sangat Pendek">Sangat Pendek</option>
+                      <option value="Tinggi">Tinggi</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Z-Score BB/U & Underweight</label>
+                    <input
+                      type="text"
+                      value={activeSasaran.zscore_bbu || ''}
+                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, zscore_bbu: e.target.value }))}
+                      placeholder="Contoh: -2.15 SD"
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-mono mb-1"
+                    />
+                    <select
+                      value={activeSasaran.status_gizi_bbu || 'BB Kurang (Underweight)'}
+                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, status_gizi_bbu: e.target.value }))}
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-orange-600"
+                    >
+                      <option value="Normal">Normal</option>
+                      <option value="BB Kurang (Underweight)">BB Kurang (Underweight)</option>
+                      <option value="BB Sangat Kurang">BB Sangat Kurang</option>
+                      <option value="Risiko BB Lebih">Risiko BB Lebih</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Naik Berat Badan (T/N)</label>
+                    <select
+                      value={activeSasaran.naik_berat_badan || 'T'}
+                      onChange={(e) => setActiveSasaran(prev => ({ 
+                        ...prev, 
+                        naik_berat_badan: e.target.value,
+                        keterangan_naik_bb: e.target.value === 'N' ? 'N (Naik)' : 'T (Tidak Naik)'
+                      }))}
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold"
+                    >
+                      <option value="T">T (Tidak Naik)</option>
+                      <option value="N">N (Naik)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Keterangan Naik Berat Badan</label>
+                    <input
+                      type="text"
+                      value={activeSasaran.keterangan_naik_bb || ''}
+                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, keterangan_naik_bb: e.target.value }))}
+                      placeholder="Contoh: T (Tidak Naik) / O / B"
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Status Outlier WHO</label>
+                    <select
+                      value={activeSasaran.status_outlier_who || 'Normal'}
+                      onChange={(e) => setActiveSasaran(prev => ({ ...prev, status_outlier_who: e.target.value }))}
+                      className="w-full p-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs"
+                    >
+                      <option value="Normal">Normal</option>
+                      <option value="Outlier">Outlier</option>
+                    </select>
                   </div>
                 </div>
               </div>
 
-              {/* Kategori Masalah Gizi */}
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Kategori Status Gizi Terverifikasi
-                </label>
-                <select
-                  value={activeSasaran.kategori_masalah_terakhir || 'Gizi Baik (Normal)'}
-                  onChange={(e) => setActiveSasaran(prev => ({ ...prev, kategori_masalah_terakhir: e.target.value as KategoriMasalahGizi }))}
-                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs dark:text-white font-medium"
-                >
-                  <option value="Gizi Baik (Normal)">Gizi Baik (Normal)</option>
-                  <option value="Stunting (Pendek)">Stunting (Pendek)</option>
-                  <option value="Wasting (Kurus/Gizi Kurang)">Wasting (Kurus/Gizi Kurang)</option>
-                  <option value="Underweight (BB Kurang)">Underweight (BB Kurang)</option>
-                  <option value="Gizi Buruk">Gizi Buruk</option>
-                  <option value="Risiko Gizi Lebih / Obesitas">Risiko Gizi Lebih / Obesitas</option>
-                </select>
-              </div>
-
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
+              {/* Modal Footer */}
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-xl font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+                  className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-semibold shadow-xs flex items-center gap-1.5 cursor-pointer"
+                  className="px-5 py-2 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white rounded-xl font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
                 >
                   <Save className="w-4 h-4" />
-                  <span>Simpan Data</span>
+                  <span>Simpan Data Balita</span>
                 </button>
               </div>
 
             </form>
+
           </div>
         </div>
       )}
 
-      {/* Modal Detail Sasaran */}
-      {isDetailOpen && activeSasaran && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-5 shadow-2xl border border-slate-200 dark:border-slate-800 text-xs">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="font-bold text-slate-900 dark:text-white text-base">Rekam Medis Terbatas Sasaran</div>
-              <button onClick={() => setIsDetailOpen(false)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
+      {/* MODAL POPUP RINCIAN PASIEN DETAIL (KLIK GAMBAR MATA) */}
+      {detailSasaran && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200 dark:border-slate-800 text-xs space-y-4 p-6">
+            
+            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300 rounded-2xl">
+                  <Baby className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                      {detailSasaran.inisial}
+                    </h3>
+                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300">
+                      {detailSasaran.kode_sasaran}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    NIK: <strong className="font-mono text-slate-700 dark:text-slate-300">{detailSasaran.nik || '-'}</strong> • {detailSasaran.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan'} • Tgl Lahir: {detailSasaran.tanggal_lahir} ({detailSasaran.usia || '-'})
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setDetailSasaran(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="py-4 space-y-2.5 text-slate-700 dark:text-slate-300">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Kode Sasaran:</span>
-                <span className="font-mono font-bold text-sky-800 dark:text-sky-300">{activeSasaran.kode_sasaran}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Inisial / Nama:</span>
-                <span className="font-semibold">{activeSasaran.inisial}</span>
-              </div>
-              {activeSasaran.nik && (
-                <div className="flex justify-between">
-                  <span className="text-slate-400">NIK:</span>
-                  <span className="font-mono">{activeSasaran.nik}</span>
-                </div>
-              )}
-              {activeSasaran.nama_ortu && (
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Orang Tua / Ibu:</span>
-                  <span>{activeSasaran.nama_ortu}</span>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-slate-400">Pulau:</span>
-                <span>{pulauList.find(p => p.pulau_id === activeSasaran.pulau_id)?.nama_pulau}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Posyandu:</span>
-                <span className="font-semibold text-sky-700 dark:text-sky-400">{activeSasaran.posyandu || '-'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Bulan Pengukuran:</span>
-                <span className="font-semibold text-amber-700 dark:text-amber-400">{activeSasaran.bulan_pengukuran || '-'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Status Gizi:</span>
-                <span className="font-bold text-rose-700 dark:text-rose-400">{activeSasaran.kategori_masalah_terakhir}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Antropometri:</span>
-                <span className="font-mono">
-                  BB: {activeSasaran.bb_terakhir} kg | TB: {activeSasaran.tb_terakhir} cm {activeSasaran.lila ? `| LiLA: ${activeSasaran.lila} cm` : ''}
+
+            {/* Rekap 3 Indeks Status Gizi WHO */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3.5 rounded-2xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/60">
+                <span className="text-[10px] text-rose-800 dark:text-rose-300 font-bold uppercase tracking-wider block">
+                  1. BB/TB (Wasting)
                 </span>
+                <div className="text-lg font-bold text-rose-950 dark:text-rose-100 mt-1">
+                  {detailSasaran.status_gizi_bbtb || detailSasaran.kategori_masalah_terakhir || 'Normal'}
+                </div>
+                <div className="text-[11px] font-mono text-rose-700 dark:text-rose-300 mt-0.5">
+                  Z-Score: <strong>{detailSasaran.zscore_bbtb || '-'}</strong>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Pemantauan Terakhir:</span>
-                <span>{activeSasaran.tanggal_pantau_terakhir || '-'}</span>
+
+              <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60">
+                <span className="text-[10px] text-amber-800 dark:text-amber-300 font-bold uppercase tracking-wider block">
+                  2. PB/U (TB/U) (Stunting)
+                </span>
+                <div className="text-lg font-bold text-amber-950 dark:text-amber-100 mt-1">
+                  {detailSasaran.status_gizi_tbu || 'Normal'}
+                </div>
+                <div className="text-[11px] font-mono text-amber-700 dark:text-amber-300 mt-0.5">
+                  Z-Score: <strong>{detailSasaran.zscore_tbu || '-'}</strong>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-orange-50/70 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900/60">
+                <span className="text-[10px] text-orange-800 dark:text-orange-300 font-bold uppercase tracking-wider block">
+                  3. BB/U (Underweight)
+                </span>
+                <div className="text-lg font-bold text-orange-950 dark:text-orange-100 mt-1">
+                  {detailSasaran.status_gizi_bbu || 'Normal'}
+                </div>
+                <div className="text-[11px] font-mono text-orange-700 dark:text-orange-300 mt-0.5">
+                  Z-Score: <strong>{detailSasaran.zscore_bbu || '-'}</strong>
+                </div>
               </div>
             </div>
-            <button
-              onClick={() => setIsDetailOpen(false)}
-              className="w-full py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold rounded-xl cursor-pointer"
-            >
-              Tutup
-            </button>
+
+            {/* Antropometri & Naik BB */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2.5">
+              <span className="font-bold text-slate-800 dark:text-slate-200 text-xs block">
+                Hasil Penimbangan & Pengukuran Terakhir:
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
+                <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                  <span className="text-[10px] text-slate-400 block">Berat Badan:</span>
+                  <strong className="text-sm font-mono text-slate-800 dark:text-white">{detailSasaran.bb_terakhir} kg</strong>
+                </div>
+                <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                  <span className="text-[10px] text-slate-400 block">Tinggi Badan:</span>
+                  <strong className="text-sm font-mono text-slate-800 dark:text-white">{detailSasaran.tb_terakhir} cm</strong>
+                </div>
+                <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                  <span className="text-[10px] text-slate-400 block">Cara Ukur:</span>
+                  <strong className="text-xs text-slate-800 dark:text-white">{detailSasaran.cara_ukur || 'Berdiri'}</strong>
+                </div>
+                <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                  <span className="text-[10px] text-slate-400 block">Status Naik BB:</span>
+                  <strong className={`text-xs ${detailSasaran.naik_berat_badan === 'N' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {detailSasaran.keterangan_naik_bb || detailSasaran.naik_berat_badan || 'T (Tidak Naik)'}
+                  </strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Wilayah & Orang Tua */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-1">
+                <span className="font-bold text-slate-800 dark:text-slate-200 block text-xs">Lokasi & Fasilitas Kesehatan:</span>
+                <div>Posyandu: <strong className="text-sky-700 dark:text-sky-300">{detailSasaran.posyandu || 'Posyandu Mawar I'}</strong></div>
+                <div>Kelurahan: <strong>{detailSasaran.kelurahan_nama || 'Kelurahan Pulau Tidung'}</strong></div>
+                <div>Kecamatan: <strong>{detailSasaran.wilayah_kecamatan || 'Kepulauan Seribu Selatan'}</strong></div>
+                <div>Puskesmas / Pustu: <strong>{detailSasaran.puskesmas_pustu || detailSasaran.unit_pelayanan || 'Puskesmas Kep. Seribu Selatan'}</strong></div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-1">
+                <span className="font-bold text-slate-800 dark:text-slate-200 block text-xs">Informasi Orang Tua / Kontak:</span>
+                <div>Nama Orang Tua: <strong>{detailSasaran.nama_ortu || '-'}</strong></div>
+                <div>No HP / WA: <strong className="font-mono">{detailSasaran.no_hp || detailSasaran.no_wa_ortu || '-'}</strong></div>
+                <div>Alamat: <strong>{detailSasaran.alamat || '-'} ({detailSasaran.rt_rw || 'RT/RW'})</strong></div>
+                <div>Status Outlier WHO: <strong className="text-slate-600">{detailSasaran.status_outlier_who || 'Normal'}</strong></div>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => handleSendWA(detailSasaran)}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Kirim Rincian ke WhatsApp</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDetailSasaran(null)}
+                className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+
           </div>
         </div>
       )}
 
-      {/* Modal Konfirmasi Hapus Balita (Khusus Tenaga Gizi & Admin) */}
+      {/* MODAL HAPUS DATA BALITA (KHUSUS TENAGA GIZI & ADMIN) */}
       {deleteConfirmModal && deleteConfirmModal.isOpen && deleteConfirmModal.sasaran && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 text-xs">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 rounded-xl">
-                <AlertTriangle className="w-6 h-6" />
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 text-xs">
+            
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="p-3 bg-rose-100 dark:bg-rose-950 rounded-2xl">
+                <Trash2 className="w-6 h-6" />
               </div>
               <div>
-                <h4 className="font-bold text-slate-900 dark:text-white text-sm">Hapus Data Sasaran Balita?</h4>
-                <p className="text-slate-500 text-[11px]">Wewenang Tenaga Gizi & Administrator Puskesmas</p>
+                <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                  Konfirmasi Hapus Data Balita
+                </h3>
+                <p className="text-slate-500 text-[11px]">
+                  Tindakan ini hanya dapat dilakukan oleh Tenaga Gizi & Admin
+                </p>
               </div>
             </div>
 
-            <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl text-slate-700 dark:text-slate-300 space-y-1">
-              <div>Kode: <strong className="font-mono text-rose-800 dark:text-rose-300">{deleteConfirmModal.sasaran.kode_sasaran}</strong></div>
-              <div>Nama: <strong>{deleteConfirmModal.sasaran.inisial}</strong></div>
-              <div>Posyandu: <span>{deleteConfirmModal.sasaran.posyandu || '-'}</span></div>
-              <div>Status Gizi: <span>{deleteConfirmModal.sasaran.kategori_masalah_terakhir}</span></div>
+            <div className="p-3.5 rounded-2xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-slate-700 dark:text-slate-300 space-y-1">
+              <div>Nama Balita: <strong>{deleteConfirmModal.sasaran.inisial}</strong></div>
+              <div>NIK: <strong className="font-mono">{deleteConfirmModal.sasaran.nik || '-'}</strong></div>
+              <div>Posyandu: <strong>{deleteConfirmModal.sasaran.posyandu || '-'}</strong></div>
+              <p className="text-[11px] text-rose-700 dark:text-rose-400 mt-1 italic">
+                Apakah Anda yakin ingin menghapus data balita ini dari basis data sasaran?
+              </p>
             </div>
 
-            <p className="text-[11px] text-slate-500">
-              Data yang dihapus akan dicatat dalam log sistem. Tindakan ini tidak dapat dibatalkan.
-            </p>
-
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setDeleteConfirmModal(null)}
-                className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold cursor-pointer"
+                className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
               >
                 Batal
               </button>
               <button
                 type="button"
-                onClick={handleDeleteSasaran}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-semibold shadow-xs flex items-center gap-1.5 cursor-pointer"
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold cursor-pointer shadow-xs"
               >
-                <Trash2 className="w-4 h-4" />
-                <span>Ya, Hapus Data</span>
+                Ya, Hapus Data
               </button>
             </div>
+
           </div>
         </div>
       )}
 
-      {/* Modal Import Excel */}
+      {/* MODAL IMPORT EXCEL */}
       {isImportModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 text-xs">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-4xl w-full max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 text-xs">
             
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2.5 bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 rounded-xl">
-                  <FileSpreadsheet className="w-5 h-5" />
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 rounded-2xl">
+                  <FileSpreadsheet className="w-6 h-6" />
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-900 dark:text-white text-base">
-                    Import Data Sasaran Balita dari Excel (.xlsx / .csv)
+                    Import Data Balita Bermasalah Gizi dari Excel (e-PPGBM)
                   </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Unggah daftar balita, hasil penimbangan posyandu, dan status gizi secara massal
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Mendukung berkas format .xlsx, .xls, dan .csv dengan 24 kolom standar penimbangan posyandu
                   </p>
                 </div>
               </div>
-              <button onClick={() => setIsImportModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
+              <button 
+                type="button"
+                onClick={() => setIsImportModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Tombol Unduh Template */}
-            <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <div className="font-bold text-emerald-900 dark:text-emerald-200">
-                  Format Template Excel Siap Pakai
-                </div>
-                <div className="text-[11px] text-emerald-800 dark:text-emerald-300 mt-0.5">
-                  Unduh template resmi berformat .xlsx dengan kolom standar: Nama, NIK, Posyandu, Bulan Pengukuran, BB, TB, LiLA, dan Status Gizi.
-                </div>
+            {/* Area Unggah File */}
+            <div className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-6 text-center hover:border-emerald-500 transition-colors">
+              <Upload className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
+              <div className="font-bold text-slate-800 dark:text-slate-200 text-sm mb-1">
+                Pilih atau Tarik Berkas Excel ke Sini
               </div>
-              <button
-                type="button"
-                onClick={handleDownloadTemplate}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold flex items-center gap-1.5 shadow-xs whitespace-nowrap cursor-pointer self-start sm:self-auto"
-              >
-                <FileDown className="w-4 h-4" />
-                <span>Unduh Template (.xlsx)</span>
-              </button>
-            </div>
-
-            {/* Input Berkas */}
-            <div className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-2xl p-6 text-center space-y-2 hover:border-emerald-500 transition-colors">
-              <Upload className="w-8 h-8 text-emerald-600 mx-auto" />
-              <div className="font-semibold text-slate-700 dark:text-slate-300">
-                Pilih Berkas Excel (.xlsx, .xls) atau CSV
-              </div>
-              <p className="text-[11px] text-slate-400">
-                Maksimal ukuran 10 MB per file
+              <p className="text-xs text-slate-500 mb-3">
+                Sistem akan membaca kolom NIK, Nama, JK, Tgl Lahir, Usia, Tgl Ukur, BB, TB, Z-Score, Status Gizi, Posyandu, dll.
               </p>
-              <label className="inline-block mt-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold rounded-xl cursor-pointer">
-                <span>Pilih Dokumen File</span>
-                <input 
-                  type="file" 
-                  accept=".xlsx, .xls, .csv" 
-                  onChange={handleFileUpload}
-                  className="hidden" 
-                />
-              </label>
+              
+              <input
+                type="file"
+                id="fileExcelUpload"
+                accept=".xlsx, .xls, .csv"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <div className="flex items-center justify-center gap-2">
+                <label
+                  htmlFor="fileExcelUpload"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold cursor-pointer shadow-xs inline-flex items-center gap-1.5"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Pilih Berkas Excel</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleDownloadTemplate}
+                  className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer inline-flex items-center gap-1.5"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Unduh Format Kosong</span>
+                </button>
+              </div>
+
               {importFileName && (
-                <div className="mt-2 text-xs font-mono text-emerald-700 dark:text-emerald-300 font-semibold">
-                  Berkas terpilih: {importFileName}
+                <div className="mt-3 text-xs font-semibold text-emerald-700 dark:text-emerald-400 font-mono">
+                  Berkas Terpilih: {importFileName}
                 </div>
               )}
             </div>
 
-            {/* Error & Success Feedback */}
             {importError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                <span>{importError}</span>
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 rounded-xl text-xs text-rose-700 dark:text-rose-300 font-medium">
+                {importError}
               </div>
             )}
 
             {importSuccessMsg && (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>{importSuccessMsg}</span>
               </div>
             )}
 
-            {/* Preview Table parsedData */}
+            {/* Pratinjau Data yang Terbaca */}
             {parsedData.length > 0 && (
               <div className="space-y-2">
-                <div className="flex items-center justify-between font-bold text-slate-800 dark:text-slate-200">
-                  <span>Pratinjau Data yang Terdeteksi ({parsedData.length} Balita):</span>
-                  <span className="text-[10px] text-slate-400">Pastikan kolom sesuai sebelum import</span>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 text-xs">
+                    Pratinjau Data Terbaca ({parsedData.length} Balita):
+                  </span>
+                  <span className="text-[11px] text-emerald-600 font-semibold">
+                    Siap diimpor ke sistem
+                  </span>
                 </div>
 
-                <div className="max-h-48 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-xl">
-                  <table className="w-full text-left text-[11px]">
-                    <thead className="bg-slate-50 dark:bg-slate-800 sticky top-0 text-slate-500 font-semibold border-b border-slate-200 dark:border-slate-700">
-                      <tr>
+                <div className="overflow-x-auto max-h-56 border border-slate-200 dark:border-slate-700 rounded-xl">
+                  <table className="w-full text-left text-[11px] border-collapse whitespace-nowrap">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 font-bold text-slate-600 dark:text-slate-300">
                         <th className="p-2">No</th>
+                        <th className="p-2">NIK</th>
                         <th className="p-2">Nama Balita</th>
                         <th className="p-2">JK</th>
+                        <th className="p-2">Tgl Lahir</th>
+                        <th className="p-2">Usia</th>
+                        <th className="p-2">BB</th>
+                        <th className="p-2">TB</th>
+                        <th className="p-2">Z-Score BB/TB</th>
+                        <th className="p-2">Status Wasting</th>
+                        <th className="p-2">Status Stunting</th>
+                        <th className="p-2">Naik BB</th>
                         <th className="p-2">Posyandu</th>
-                        <th className="p-2">Bulan</th>
-                        <th className="p-2">BB / TB</th>
-                        <th className="p-2">Status Gizi</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {parsedData.slice(0, 50).map((row, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/50">
-                          <td className="p-2 font-mono text-slate-400">{idx + 1}</td>
-                          <td className="p-2 font-bold text-slate-900 dark:text-white">{row.inisial}</td>
-                          <td className="p-2">{row.jenis_kelamin}</td>
-                          <td className="p-2 text-sky-700 dark:text-sky-400">{row.posyandu}</td>
-                          <td className="p-2 text-amber-700 dark:text-amber-400">{row.bulan_pengukuran}</td>
-                          <td className="p-2 font-mono">{row.bb_terakhir}kg / {row.tb_terakhir}cm</td>
-                          <td className="p-2">
-                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 dark:bg-slate-800 font-medium">
-                              {row.kategori_masalah_terakhir}
-                            </span>
-                          </td>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
+                      {parsedData.slice(0, 8).map((row, rIdx) => (
+                        <tr key={rIdx} className="hover:bg-slate-50/70">
+                          <td className="p-2 text-center text-slate-400">{rIdx + 1}</td>
+                          <td className="p-2">{row.nik}</td>
+                          <td className="p-2 font-bold font-sans">{row.inisial}</td>
+                          <td className="p-2 text-center">{row.jenis_kelamin}</td>
+                          <td className="p-2">{row.tanggal_lahir}</td>
+                          <td className="p-2">{row.usia}</td>
+                          <td className="p-2">{row.bb_terakhir} kg</td>
+                          <td className="p-2">{row.tb_terakhir} cm</td>
+                          <td className="p-2">{row.zscore_bbtb}</td>
+                          <td className="p-2 font-sans font-bold text-rose-600">{row.status_gizi_bbtb}</td>
+                          <td className="p-2 font-sans">{row.status_gizi_tbu}</td>
+                          <td className="p-2 text-center">{row.naik_berat_badan}</td>
+                          <td className="p-2 font-sans">{row.posyandu}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1107,87 +1749,75 @@ export const SasaranView: React.FC<SasaranViewProps> = ({
               </div>
             )}
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => setIsImportModalOpen(false)}
-                className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold cursor-pointer"
-              >
-                Tutup
-              </button>
-              {parsedData.length > 0 && (
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <span className="text-[11px] text-slate-400">
+                Balita gizi bermasalah yang diimpor akan otomatis masuk ke Daftar Tindak Lanjut lintas sektor.
+              </span>
+
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  disabled={isImporting}
+                  onClick={() => setIsImportModalOpen(false)}
+                  className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  disabled={parsedData.length === 0 || isImporting}
                   onClick={handleExecuteImport}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white rounded-xl font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
                 >
                   <Save className="w-4 h-4" />
-                  <span>{isImporting ? 'Sedang Menyimpan...' : `Simpan & Import ${parsedData.length} Balita`}</span>
+                  <span>{isImporting ? 'Sedang Mengimpor...' : `Impor ${parsedData.length} Balita`}</span>
                 </button>
-              )}
+              </div>
             </div>
 
           </div>
         </div>
       )}
 
-      {/* Modal Konfirmasi Notifikasi WhatsApp Otomatis */}
+      {/* MODAL NOTIFIKASI WHATSAPP */}
       {waAlertModal && waAlertModal.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="p-3 rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                <CheckCircle2 className="w-6 h-6" />
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-xs space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-emerald-100 text-emerald-700 rounded-2xl">
+                <Send className="w-6 h-6" />
               </div>
-              <div className="flex-1">
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Sasaran Disimpan & Notifikasi WA Terkirim!
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                  {waAlertModal.title}
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Notifikasi otomatis telah disiapkan untuk kader posyandu, tenaga gizi, dan lintas sektor {waAlertModal.pulauName}.
+                <p className="text-xs text-slate-500">
+                  Kirim notifikasi balita bermasalah gizi ke grup WhatsApp Lintas Sektor
                 </p>
               </div>
-              <button 
-                onClick={() => setWaAlertModal(null)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
             </div>
 
-            <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-xs space-y-1.5">
-              <div className="font-semibold text-slate-700 dark:text-slate-300">Target Penerima Notifikasi:</div>
-              <ul className="list-disc list-inside text-slate-600 dark:text-slate-400 space-y-0.5">
-                {waAlertModal.recipients.map((r, i) => (
-                  <li key={i}>{r}</li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 rounded-xl text-xs font-mono text-emerald-900 dark:text-emerald-200 whitespace-pre-wrap max-h-36 overflow-y-auto">
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-2xl font-mono text-[11px] whitespace-pre-wrap text-slate-800 dark:text-slate-200 max-h-52 overflow-y-auto">
               {waAlertModal.text}
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setWaAlertModal(null)}
-                className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-xs cursor-pointer"
+                className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
               >
                 Tutup
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  window.open(waAlertModal.link, '_blank');
-                  setWaAlertModal(null);
-                }}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer"
+              <a
+                href={waAlertModal.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setWaAlertModal(null)}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center gap-1.5 shadow-xs"
               >
                 <Send className="w-4 h-4" />
                 <span>Buka WhatsApp Sekarang</span>
-              </button>
+              </a>
             </div>
           </div>
         </div>

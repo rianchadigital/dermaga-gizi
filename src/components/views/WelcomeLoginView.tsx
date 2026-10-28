@@ -198,10 +198,10 @@ export const WelcomeLoginView: React.FC<WelcomeLoginViewProps> = ({ users, onLog
                   <div className="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
                     <Users2 className="w-4 h-4" />
                   </div>
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">Kolaborasi 7 Sektor</h3>
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">Kolaborasi Lintas Sektor</h3>
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Satu anak bermasalah gizi ditangani bersama oleh Nakes Gizi, Kader, Kelurahan, Dishub, PKK, Satpol PP, dan Dinsos dalam 1 tabel terpadu.
+                  Satu anak bermasalah gizi ditangani bersama oleh Nakes Gizi, Kader, Kelurahan, Kecamatan, Dishub, PKK, Satpol PP, dan Dinsos dalam 1 sistem terpadu.
                 </p>
               </div>
 

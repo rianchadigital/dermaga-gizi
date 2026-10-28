@@ -59,6 +59,10 @@ export function getKategoriGiziBadge(kategori?: string): { color: string; dot: s
       return { color: 'text-rose-700 font-semibold', dot: 'bg-rose-600' };
     case 'Underweight (BB Kurang)':
       return { color: 'text-yellow-700 font-medium', dot: 'bg-yellow-500' };
+    case 'Overweight':
+      return { color: 'text-violet-700 font-medium', dot: 'bg-violet-500' };
+    case 'Obesitas':
+      return { color: 'text-purple-800 font-semibold', dot: 'bg-purple-600' };
     case 'Gizi Baik (Normal)':
       return { color: 'text-emerald-700 font-medium', dot: 'bg-emerald-500' };
     default:

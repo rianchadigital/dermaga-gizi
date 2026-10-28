@@ -267,6 +267,10 @@ class ApiService {
   }
 
   // --- CRUD Sasaran ---
+  public async saveSasaran(sasaran: SasaranBalita): Promise<SasaranBalita> {
+    return this.createSasaran(sasaran);
+  }
+
   public async createSasaran(sasaran: SasaranBalita): Promise<SasaranBalita> {
     const saved = storageService.saveSasaran(sasaran);
     

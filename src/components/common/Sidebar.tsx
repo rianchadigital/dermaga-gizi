@@ -26,7 +26,6 @@ import { User } from '../../types';
 export type ActiveTab = 
   | 'dashboard'
   | 'map'
-  | 'input-posyandu'
   | 'tindak-lanjut'
   | 'kendala'
   | 'lintas-sektor'
@@ -35,7 +34,6 @@ export type ActiveTab =
   | 'sasaran'
   | 'master-posyandu'
   | 'master-lintas-sektor'
-  | 'master'
   | 'users'
   | 'panduan'
   | 'settings';
@@ -65,13 +63,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentUser,
   onLogout
 }) => {
-  // Sesuai instruksi: Login kader HANYA melihat:
-  // 1. Beranda / Ringkasan
-  // 2. Peta Wilayah
-  // 3. Daftar Tindak Lanjut (Wewenang Kader)
-  const isKader = currentUser?.role === 'KADER';
+  // Pengaturan Hak Akses Menu:
+  // - Petugas Gizi & Admin: Muncul SEMUA menu
+  // - Lintas Sektor & Kader: HANYA muncul 4 menu: Beranda, Peta Wilayah, Daftar Tindak Lanjut, Daftar Kendala
+  const isAdminOrGizi = currentUser?.role === 'ADMIN' || 
+    currentUser?.role === 'TENAGA_GIZI' || 
+    currentUser?.role === 'KEPALA_PUSKESMAS';
 
-  const kaderNav = [
+  const isKaderOrLintasSektor = !isAdminOrGizi;
+
+  // 4 Menu Utama untuk Kader & Lintas Sektor
+  const restrictedNav = [
     {
       id: 'dashboard',
       label: 'Beranda / Ringkasan',
@@ -90,9 +92,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: ClipboardList,
       badge: overdueCount > 0 ? `${overdueCount}` : null,
       badgeColor: 'bg-rose-500 text-white font-bold'
+    },
+    {
+      id: 'kendala',
+      label: 'Daftar Kendala',
+      icon: Compass,
+      badge: kendalaCount > 0 ? `${kendalaCount}` : null,
+      badgeColor: 'bg-amber-500 text-white font-bold'
     }
   ];
 
+  // Menu Lengkap untuk Tenaga Gizi & Admin
   const adminMainNav = [
     {
       id: 'dashboard',
@@ -107,11 +117,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge: null
     },
     {
-      id: 'input-posyandu',
-      label: 'Input Laporan Posyandu',
-      icon: Scale,
-      badge: 'Input',
-      badgeColor: 'bg-emerald-500 text-white font-bold'
+      id: 'sasaran',
+      label: 'Data Sasaran Balita Bermasalah Gizi',
+      icon: Baby,
+      badge: null
     },
     {
       id: 'tindak-lanjut',
@@ -122,7 +131,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'kendala',
-      label: 'Kendala Akses',
+      label: 'Daftar Kendala',
       icon: Compass,
       badge: kendalaCount > 0 ? `${kendalaCount}` : null,
       badgeColor: 'bg-amber-500/90 text-white font-bold'
@@ -160,16 +169,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Contact2
     },
     {
-      id: 'sasaran',
-      label: 'Data Sasaran Balita',
-      icon: Baby
-    },
-    {
-      id: 'master',
-      label: 'Data Intervensi Gizi',
-      icon: Stethoscope
-    },
-    {
       id: 'users',
       label: 'Pengguna & Akses Sistem',
       icon: ShieldAlert
@@ -201,7 +200,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           setIsOpenMobile(false);
         }}
         className={`
-          w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all group
+          w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all group cursor-pointer
           ${isActive 
             ? 'bg-[#1e4e8c] text-white shadow-md shadow-sky-950/40 font-semibold' 
             : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'}
@@ -248,15 +247,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {/* Role Banner: Khusus Petugas Posyandu / Kader */}
-        {isKader && (
+        {/* Role Banner: Untuk Kader atau Lintas Sektor */}
+        {isKaderOrLintasSektor && (
           <div className="mx-3 mt-3 p-2.5 rounded-xl bg-emerald-950/50 border border-emerald-500/30 text-emerald-200 text-xs">
             <div className="font-bold flex items-center gap-1.5 text-emerald-300">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Akses Kader Posyandu</span>
+              <span>
+                {currentUser?.role === 'KADER' ? 'Akses Kader Posyandu' : 'Akses Lintas Sektor'}
+              </span>
             </div>
             <p className="text-[10px] text-emerald-200/80 mt-1 leading-tight">
-              Menu wewenang kader: Beranda / Ringkasan, Peta Wilayah, dan Daftar Tindak Lanjut.
+              Menu aktif: Beranda, Peta Wilayah, Daftar Tindak Lanjut, dan Daftar Kendala.
             </p>
           </div>
         )}
@@ -266,17 +267,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
           
           {/* Main Operational Menus */}
           <div className="space-y-1">
-            {isKader ? (
-              // HANYA 3 MENU UNTUK PETUGAS POSYANDU SESUAI PERMINTAAN USER
-              kaderNav.map(renderNavButton)
+            {isKaderOrLintasSektor ? (
+              // HANYA 4 MENU UNTUK KADER & LINTAS SEKTOR SESUAI PERMINTAAN USER
+              restrictedNav.map(renderNavButton)
             ) : (
-              // MENU LENGKAP UNTUK ADMIN / NAKES / LINTAS SEKTOR
+              // MENU LENGKAP UNTUK ADMIN & PETUGAS GIZI
               adminMainNav.map(renderNavButton)
             )}
           </div>
 
-          {/* DATA MASTER Section (Hanya untuk Admin / Pimpinan / Nakes) */}
-          {!isKader && (
+          {/* DATA MASTER Section (Hanya untuk Tenaga Gizi & Admin) */}
+          {isAdminOrGizi && (
             <div className="pt-2">
               <div className="px-3 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 DATA MASTER
@@ -287,8 +288,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           )}
 
-          {/* BANTUAN Section (Hanya untuk Admin / Nakes) */}
-          {!isKader && (
+          {/* BANTUAN Section (Hanya untuk Tenaga Gizi & Admin) */}
+          {isAdminOrGizi && (
             <div className="pt-2">
               <div className="px-3 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 BANTUAN

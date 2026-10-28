@@ -78,8 +78,12 @@ export interface Pulau {
 export type KategoriMasalahGizi = 
   | 'Stunting (Pendek)'
   | 'Wasting (Kurus/Gizi Kurang)'
+  | 'Gizi Kurang (Wasting)'
+  | 'Gizi Kurang'
   | 'Underweight (BB Kurang)'
   | 'Gizi Buruk'
+  | 'Overweight'
+  | 'Obesitas'
   | 'Risiko Gizi Lebih / Obesitas'
   | 'Gizi Baik (Normal)';
 
@@ -87,25 +91,40 @@ export interface SasaranBalita {
   sasaran_id: string;
   kode_sasaran: string; // Anonymous code e.g. "BLT-TDG-042"
   inisial: string; // e.g. "An. AR"
+  nik?: string;
   tanggal_lahir: string; // DD/MM/YYYY
   jenis_kelamin: 'L' | 'P';
+  usia?: string; // e.g. "24 bln"
+  tanggal_ukur?: string; // DD/MM/YYYY
+  cara_ukur?: 'Berdiri' | 'Terlentang' | string;
+  bb_terakhir?: number; // Berat Badan (kg)
+  tb_terakhir?: number; // Tinggi Badan (cm)
+  zscore_bbtb?: string | number; // Z-Score BB/TB
+  status_gizi_bbtb?: string; // Status Gizi BB/TB (Wasting)
+  zscore_tbu?: string | number; // Z-Score PB/U (TB/U)
+  status_gizi_tbu?: string; // Status Gizi PB/U (Stunting)
+  zscore_bbu?: string | number; // Z-Score BB/U
+  status_gizi_bbu?: string; // Status Gizi BB/U (Underweight)
+  naik_berat_badan?: 'N' | 'T' | string; // Naik Berat Badan
+  keterangan_naik_bb?: string; // Keterangan Naik Berat Badan
+  status_outlier_who?: 'Normal' | 'Outlier' | string; // Status Outlier WHO
+  nama_ortu?: string;
+  no_wa_ortu?: string;
+  no_hp?: string;
+  alamat?: string;
+  rt_rw?: string;
+  wilayah_kecamatan?: string;
+  kelurahan_id?: string;
+  kelurahan_nama?: string;
+  puskesmas_pustu?: string;
+  posyandu?: string;
   pulau_id: string;
   unit_pelayanan: string;
   tanggal_registrasi: string;
   status_aktif: boolean;
   kategori_masalah_terakhir?: KategoriMasalahGizi;
-  bb_terakhir?: number; // kg
-  tb_terakhir?: number; // cm
   tanggal_pantau_terakhir?: string;
   bulan_pengukuran?: string; // e.g. "Oktober 2026"
-  posyandu?: string; // e.g. "Posyandu Cempaka 1"
-  kelurahan_id?: string;
-  kelurahan_nama?: string;
-  nik?: string;
-  nama_ortu?: string;
-  no_wa_ortu?: string;
-  alamat?: string;
-  rt_rw?: string;
   lila?: number; // cm
 }
 
@@ -170,29 +189,31 @@ export interface TindakLanjut {
   posyandu_nama?: string;
   kelurahan_nama?: string;
   tindak_lanjut_lintas_sektor?: TindakLanjutLintasSektor[];
+  kendala_kategori?: KategoriKendala | string;
+  kendala_detail?: string;
+  kendala_status?: 'Ada Kendala' | 'Dalam Penanganan' | 'Terselesaikan';
   created_at: string;
   updated_at: string;
 }
 
 export type KategoriKendala = 
+  | 'Ekonomi'
   | 'Transportasi'
-  | 'Transportasi laut'
-  | 'Cuaca dan gelombang'
-  | 'Ketidakhadiran sasaran'
-  | 'Perubahan jadwal pelayanan'
-  | 'Perubahan jadwal posyandu'
-  | 'Keterbatasan petugas'
-  | 'Logistik dan ketersediaan intervensi'
-  | 'Ketersediaan logistik PMT'
-  | 'Komunikasi'
-  | 'Kendala lainnya';
+  | 'Penolakan'
+  | 'Kurang Pengetahuan'
+  | 'Lainnya'
+  | string;
 
 export type StatusKendala = 
   | 'Baru'
   | 'Dalam proses'
   | 'Menunggu koordinasi'
   | 'Selesai'
-  | 'Belum terselesaikan';
+  | 'Belum terselesaikan'
+  | 'Ada Kendala'
+  | 'Dalam Penanganan'
+  | 'Terselesaikan'
+  | string;
 
 export interface Kendala {
   kendala_id: string;
@@ -200,15 +221,20 @@ export interface Kendala {
   pulau_id: string;
   kategori: KategoriKendala;
   deskripsi: string;
+  kendala_detail?: string; // Teks deskripsi rincian masalah
   dampak: string;
   rencana_penyelesaian: string;
   penanggung_jawab: string;
   tenggat: string;
   status: StatusKendala;
   sasaran_terkait_kode?: string;
+  sasaran_id?: string;
+  tindak_lanjut_id?: string;
+  pelapor_nama?: string;
+  pelapor_sektor?: string;
   catatan_tindak_lanjut?: string;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 export type StatusLintasSektor = 

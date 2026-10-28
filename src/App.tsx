@@ -15,10 +15,8 @@ import { KinerjaRoleView } from './components/views/KinerjaRoleView';
 import { KendalaView } from './components/views/KendalaView';
 import { LintasSektorView } from './components/views/LintasSektorView';
 import { LaporanView } from './components/views/LaporanView';
-import { DataMasterView } from './components/views/DataMasterView';
 import { MasterPosyanduView } from './components/views/MasterPosyanduView';
 import { MasterLintasSektorView } from './components/views/MasterLintasSektorView';
-import { InputLaporanPosyanduView } from './components/views/InputLaporanPosyanduView';
 import { UsersView } from './components/views/UsersView';
 import { SettingsView } from './components/views/SettingsView';
 import { PanduanView } from './components/views/PanduanView';
@@ -90,10 +88,15 @@ export default function App() {
     });
   };
 
-  // Batasi akses modul untuk peran KADER: hanya Beranda (dashboard), Peta Wilayah (map), dan Daftar Tindak Lanjut (tindak-lanjut)
+  // Batasi akses modul untuk peran KADER & LINTAS_SEKTOR:
+  // HANYA muncul 4 menu: Beranda (dashboard), Peta Wilayah (map), Daftar Tindak Lanjut (tindak-lanjut), dan Daftar Kendala (kendala)
   useEffect(() => {
-    if (currentUser.role === 'KADER') {
-      const allowed = ['dashboard', 'map', 'tindak-lanjut'];
+    const isAdminOrGizi = currentUser?.role === 'ADMIN' || 
+      currentUser?.role === 'TENAGA_GIZI' || 
+      currentUser?.role === 'KEPALA_PUSKESMAS';
+
+    if (!isAdminOrGizi) {
+      const allowed = ['dashboard', 'map', 'tindak-lanjut', 'kendala'];
       if (!allowed.includes(activeTab)) {
         setActiveTab('dashboard');
       }
@@ -137,9 +140,12 @@ export default function App() {
   const handleSwitchUser = (userId: string) => {
     storageService.setCurrentUser(userId);
     const u = storageService.getCurrentUser();
-    // Jika peran yang dipilih adalah KADER, arahkan ke menu wewenang kader: Beranda, Peta Wilayah, atau Daftar Tindak Lanjut
-    if (u.role === 'KADER' && activeTab !== 'dashboard' && activeTab !== 'map' && activeTab !== 'tindak-lanjut') {
-      setActiveTab('dashboard');
+    const isAdminOrGizi = u.role === 'ADMIN' || u.role === 'TENAGA_GIZI' || u.role === 'KEPALA_PUSKESMAS';
+    if (!isAdminOrGizi) {
+      const allowed = ['dashboard', 'map', 'tindak-lanjut', 'kendala'];
+      if (!allowed.includes(activeTab)) {
+        setActiveTab('dashboard');
+      }
     }
     handleRefreshData();
   };
@@ -149,8 +155,12 @@ export default function App() {
     setCurrentUser(user);
     localStorage.setItem('dermaga_is_logged_in', 'true');
     setIsLoggedIn(true);
-    if (user.role === 'KADER') {
-      setActiveTab('dashboard');
+    const isAdminOrGizi = user.role === 'ADMIN' || user.role === 'TENAGA_GIZI' || user.role === 'KEPALA_PUSKESMAS';
+    if (!isAdminOrGizi) {
+      const allowed = ['dashboard', 'map', 'tindak-lanjut', 'kendala'];
+      if (!allowed.includes(activeTab)) {
+        setActiveTab('dashboard');
+      }
     }
     handleRefreshData();
   };
@@ -250,14 +260,6 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'input-posyandu' && (
-            <InputLaporanPosyanduView
-              currentUser={currentUser}
-              onRefreshData={handleRefreshData}
-              onNavigateTab={handleNavigateTab}
-            />
-          )}
-
           {activeTab === 'master-posyandu' && (
             <MasterPosyanduView
               currentUser={currentUser}
@@ -325,14 +327,6 @@ export default function App() {
               setFilter={setFilter}
               pulauList={pulauList}
               currentUser={currentUser}
-            />
-          )}
-
-          {activeTab === 'master' && (
-            <DataMasterView
-              pulauList={pulauList}
-              currentUser={currentUser}
-              onRefreshData={handleRefreshData}
             />
           )}
 

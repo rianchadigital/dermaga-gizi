@@ -159,6 +159,19 @@ export const TindakLanjutView: React.FC<TindakLanjutViewProps> = ({
   // Status Kompresi Foto
   const [isCompressingPhoto, setIsCompressingPhoto] = useState<boolean>(false);
 
+  // Modal Pencatatan Kendala Intervensi Balita
+  const [isKendalaModalOpen, setIsKendalaModalOpen] = useState<boolean>(false);
+  const [selectedTLForKendala, setSelectedTLForKendala] = useState<TindakLanjut | null>(null);
+  const [formKendala, setFormKendala] = useState<{
+    kategori: 'Ekonomi' | 'Transportasi' | 'Penolakan' | 'Kurang Pengetahuan' | 'Lainnya';
+    kendala_detail: string;
+    status: 'Ada Kendala' | 'Dalam Penanganan' | 'Terselesaikan';
+  }>({
+    kategori: 'Ekonomi',
+    kendala_detail: '',
+    status: 'Ada Kendala'
+  });
+
   const allSasaran = storageService.getSasaranList();
   const allUsers = storageService.getUsers();
   const rawTindakLanjutList = storageService.getTindakLanjutList(filter);
@@ -416,6 +429,35 @@ export const TindakLanjutView: React.FC<TindakLanjutViewProps> = ({
     } catch (err) {
       console.error('Error saat menyimpan tindak lanjut lintas sektor:', err);
       setIsAksiLintasSektorOpen(false);
+      onRefreshData();
+    }
+  };
+
+  const handleOpenKendalaModal = (tl: TindakLanjut) => {
+    setSelectedTLForKendala(tl);
+    setFormKendala({
+      kategori: (tl.kendala_kategori as any) || 'Ekonomi',
+      kendala_detail: tl.kendala_detail || '',
+      status: (tl.kendala_status as any) || 'Ada Kendala'
+    });
+    setIsKendalaModalOpen(true);
+  };
+
+  const handleSaveKendala = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTLForKendala) return;
+    
+    try {
+      storageService.saveKendalaFromTindakLanjut(selectedTLForKendala.tindak_lanjut_id, {
+        kategori: formKendala.kategori,
+        kendala_detail: formKendala.kendala_detail,
+        status: formKendala.status
+      });
+      setIsKendalaModalOpen(false);
+      onRefreshData();
+    } catch (err) {
+      console.error('Error saat menyimpan kendala:', err);
+      setIsKendalaModalOpen(false);
       onRefreshData();
     }
   };
@@ -846,14 +888,14 @@ export const TindakLanjutView: React.FC<TindakLanjutViewProps> = ({
                             </div>
                           )}
 
-                          {/* Baris Kolaborasi 7 Sektor Terpadu (1 Pasien Balita Ditindaklanjuti Lintas Sektor) */}
+                          {/* Baris Kolaborasi Lintas Sektor Terpadu (1 Pasien Balita Ditindaklanjuti Lintas Sektor) */}
                           <div className="mt-2 pt-1.5 border-t border-slate-100 dark:border-slate-800/80">
                             <div className="flex items-center gap-1 mb-1">
                               <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                                Kolaborasi 7 Sektor:
+                                Kolaborasi Lintas Sektor:
                               </span>
                               <span className="text-[9px] text-sky-600 dark:text-sky-400 font-mono">
-                                ({tl.tindak_lanjut_lintas_sektor?.length || 0}/7 Aksi)
+                                ({tl.tindak_lanjut_lintas_sektor?.length || 0} Aksi)
                               </span>
                             </div>
                             <div className="flex flex-wrap items-center gap-1">
@@ -891,6 +933,17 @@ export const TindakLanjutView: React.FC<TindakLanjutViewProps> = ({
                             </div>
                           </div>
 
+                          {/* Indikator Kendala Jika Ada */}
+                          {tl.kendala_kategori && (
+                            <div className="mt-1.5 flex items-center gap-1">
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800" title={tl.kendala_detail || ''}>
+                                <AlertTriangle className="w-2.5 h-2.5 text-rose-600 shrink-0" />
+                                <span>Kendala: {tl.kendala_kategori}</span>
+                                <span className="font-normal text-[9px] opacity-80">({tl.kendala_status || 'Ada Kendala'})</span>
+                              </span>
+                            </div>
+                          )}
+
                         </div>
                       </td>
                       <td className="py-3 px-3 text-slate-600 dark:text-slate-400 font-mono text-[11px] whitespace-nowrap">
@@ -904,15 +957,30 @@ export const TindakLanjutView: React.FC<TindakLanjutViewProps> = ({
                       </td>
                       <td className="py-3 px-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
-                          {/* Sub Menu AKSI: Kolaborasi Tindak Lanjut 7 Sektor */}
+                          {/* Sub Menu AKSI: Kolaborasi Tindak Lanjut Lintas Sektor */}
                           <button
                             type="button"
                             onClick={() => handleOpenAksiLintasSektor(tl)}
                             className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white shadow-xs transition-all cursor-pointer"
-                            title="Buka Kolaborasi Tindak Lanjut 7 Sektor (Petugas Kesehatan, Kader, Kelurahan, Dishub, PKK, Satpol PP, Dinas Sosial)"
+                            title="Buka Kolaborasi Tindak Lanjut Lintas Sektor (Petugas Kesehatan, Kader, Kelurahan, Dishub, PKK, Satpol PP, Dinas Sosial)"
                           >
                             <Users2 className="w-3.5 h-3.5" />
-                            <span>Tindak Lanjut 7 Sektor</span>
+                            <span>Tindak Lanjut Lintas Sektor</span>
+                          </button>
+
+                          {/* Tombol Catat / Kelola Kendala */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenKendalaModal(tl)}
+                            className={`px-2 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1 shadow-xs transition-all cursor-pointer ${
+                              tl.kendala_kategori 
+                                ? 'bg-rose-100 hover:bg-rose-200 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
+                                : 'bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                            }`}
+                            title="Catat atau Kelola Kendala Intervensi Balita"
+                          >
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                            <span>{tl.kendala_kategori ? 'Kendala' : '+ Kendala'}</span>
                           </button>
 
                           {canEdit && (
@@ -1334,7 +1402,7 @@ export const TindakLanjutView: React.FC<TindakLanjutViewProps> = ({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-slate-800 dark:text-slate-200 text-xs">
-                      + Pilih Sektor Pelaksana (Kolaborasi 7 Sektor):
+                      + Pilih Sektor Pelaksana (Kolaborasi Lintas Sektor):
                     </span>
                     <span className="text-[10px] text-sky-600 font-medium">Klik untuk ganti sektor</span>
                   </div>
@@ -1778,7 +1846,7 @@ export const TindakLanjutView: React.FC<TindakLanjutViewProps> = ({
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Kolaborasi penanganan gizi balita terpadu Puskesmas & 7 Unit Lintas Sektor
+                      Kolaborasi penanganan gizi balita terpadu Puskesmas & Unit Lintas Sektor
                     </p>
                   </div>
                 </div>
@@ -1924,7 +1992,7 @@ export const TindakLanjutView: React.FC<TindakLanjutViewProps> = ({
                     </h4>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                    {countAksi} dari 7 Sektor Telah Bertindak
+                    {countAksi} Sektor Telah Bertindak
                   </span>
                 </div>
 
@@ -2039,7 +2107,7 @@ export const TindakLanjutView: React.FC<TindakLanjutViewProps> = ({
                 {/* Status Sektor yang Belum Tindak Lanjut */}
                 <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-200 dark:border-slate-700 text-[11px]">
                   <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-1.5">
-                    Status Partisipasi Kolaborasi 7 Sektor:
+                    Status Partisipasi Kolaborasi Lintas Sektor:
                   </span>
                   <div className="flex flex-wrap gap-1.5">
                     {tujuhSektor.map((sec, sIdx) => {
@@ -2175,6 +2243,205 @@ export const TindakLanjutView: React.FC<TindakLanjutViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* MODAL PENCATATAN & PENGELOLAAN KENDALA INTERVENSI BALITA */}
+      {isKendalaModalOpen && selectedTLForKendala && (() => {
+        const sasaran = allSasaran.find(s => s.sasaran_id === selectedTLForKendala.sasaran_id);
+        const pulau = pulauList.find(p => p.pulau_id === sasaran?.pulau_id);
+
+        const opsiKendala: {
+          id: 'Ekonomi' | 'Transportasi' | 'Penolakan' | 'Kurang Pengetahuan' | 'Lainnya';
+          label: string;
+          icon: string;
+          desc: string;
+          contoh: string;
+        }[] = [
+          {
+            id: 'Ekonomi',
+            label: 'Ekonomi',
+            icon: '💰',
+            desc: 'Daya beli rendah, ketidakmampuan membeli pangan berprotein tinggi',
+            contoh: 'Orang tua berpenghasilan harian tidak menentu dan kesulitan membeli lauk telur/ikan/susu.'
+          },
+          {
+            id: 'Transportasi',
+            label: 'Transportasi',
+            icon: '🚤',
+            desc: 'Akses perahu antarpulau, gelombang tinggi, jarak ke faskes',
+            contoh: 'Kendala biaya atau tidak ada jadwal kapal reguler untuk membawa balita periksa ke Puskesmas.'
+          },
+          {
+            id: 'Penolakan',
+            label: 'Penolakan',
+            icon: '🚫',
+            desc: 'Keluarga menolak rujukan medis, konseling, atau konsumsi PMT',
+            contoh: 'Orang tua enggan dirujuk ke RSUD dan menolak balita diberi formula gizi khusus dari puskesmas.'
+          },
+          {
+            id: 'Kurang Pengetahuan',
+            label: 'Kurang Pengetahuan',
+            icon: '📖',
+            desc: 'Minim pemahaman gizi seimbang, pola asuh, sanitasi, atau MP-ASI',
+            contoh: 'Balita hanya diberi makanan instan/snack berlebih, belum memahami pentingnya protein hewani harian.'
+          },
+          {
+            id: 'Lainnya',
+            label: 'Lainnya',
+            icon: '⚙️',
+            desc: 'Penyakit penyerta kronis, sanitasi air bersih, atau kendala lain',
+            contoh: 'Balita mengalami batuk berulang disertai kondisi lingkungan rumah belum memiliki jamban sehat.'
+          }
+        ];
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto text-xs">
+              
+              <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-2xl bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300">
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white text-base">
+                      Pencatatan Kendala Intervensi Balita
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Laporkan kendala lapangan agar dapat dipetakan dan dimitigasi lintas sektor
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  type="button" 
+                  onClick={() => setIsKendalaModalOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Info Pasien Singkat */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                <div>
+                  <span className="font-mono font-bold text-sky-700 dark:text-sky-400">
+                    {sasaran?.kode_sasaran || selectedTLForKendala.sasaran_id}
+                  </span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 ml-2">
+                    {sasaran?.inisial || 'Balita'}
+                  </span>
+                  <div className="text-[11px] text-slate-500">
+                    {pulau?.nama_pulau || 'Kepulauan Seribu'} • Masalah: <strong className="text-rose-600">{sasaran?.kategori_masalah_terakhir || selectedTLForKendala.kategori}</strong>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                  {selectedTLForKendala.kendala_kategori ? 'Update Kendala' : 'Kendala Baru'}
+                </span>
+              </div>
+
+              <form onSubmit={handleSaveKendala} className="space-y-4">
+                
+                {/* 1. Pilih Kategori Kendala */}
+                <div>
+                  <label className="block font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                    1. Pilih Kategori Kendala Utama:
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {opsiKendala.map(item => {
+                      const isSelected = formKendala.kategori === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setFormKendala(prev => ({
+                              ...prev,
+                              kategori: item.id,
+                              kendala_detail: prev.kendala_detail ? prev.kendala_detail : item.contoh
+                            }));
+                          }}
+                          className={`p-2.5 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                            isSelected
+                              ? 'bg-amber-50 dark:bg-amber-950/50 border-amber-500 text-amber-950 dark:text-amber-200 shadow-xs ring-1 ring-amber-500'
+                              : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className="text-xl shrink-0 mt-0.5">{item.icon}</span>
+                          <div className="min-w-0">
+                            <span className="font-bold block text-xs">{item.label}</span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 block leading-tight mt-0.5">
+                              {item.desc}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Redaksi Masalah & Detail Kendala */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-bold text-slate-800 dark:text-slate-200">
+                      2. Rincian Masalah / Detail Kendala di Lapangan:
+                    </label>
+                    <span className="text-[10px] text-slate-400">Tuliskan redaksi spesifik</span>
+                  </div>
+                  <textarea
+                    rows={3}
+                    required
+                    value={formKendala.kendala_detail}
+                    onChange={e => setFormKendala(prev => ({ ...prev, kendala_detail: e.target.value }))}
+                    placeholder="Tuliskan uraian masalah spesifik yang dialami balita/keluarga terkait pilihan kendala di atas..."
+                    className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-amber-500 text-slate-800 dark:text-slate-200 leading-relaxed"
+                  />
+                </div>
+
+                {/* 3. Status Kendala */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-800 dark:text-slate-200 mb-1">
+                      3. Status Penanganan Kendala:
+                    </label>
+                    <select
+                      value={formKendala.status}
+                      onChange={e => setFormKendala(prev => ({ ...prev, status: e.target.value as any }))}
+                      className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none font-semibold"
+                    >
+                      <option value="Ada Kendala">⚠️ Ada Kendala (Aktif/Belum Teratasi)</option>
+                      <option value="Dalam Penanganan">⏳ Dalam Penanganan / Koordinasi Lintas Sektor</option>
+                      <option value="Terselesaikan">✅ Terselesaikan (Kendala Teratasi)</option>
+                    </select>
+                  </div>
+
+                  <div className="p-2.5 bg-amber-50/60 dark:bg-amber-950/30 rounded-xl border border-amber-200 dark:border-amber-900/40 text-[11px] text-amber-900 dark:text-amber-300 flex flex-col justify-center">
+                    <span className="font-bold">Sinkronisasi Otomatis:</span>
+                    <span>Kendala ini akan langsung tercatat dan masuk ke menu <strong>Daftar Kendala</strong> untuk monitoring pimpinan dan lintas sektor.</span>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsKendalaModalOpen(false)}
+                    className="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-700 hover:to-rose-700 text-white rounded-xl font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Simpan Kendala</span>
+                  </button>
+                </div>
+
+              </form>
+
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

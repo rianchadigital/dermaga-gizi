@@ -16,7 +16,9 @@ import {
   EvaluasiKelurahanItem,
   EvaluasiPosyanduItem,
   WhatsAppNotification,
-  TindakLanjutLintasSektor
+  TindakLanjutLintasSektor,
+  KategoriKendala,
+  StatusKendala
 } from '../types';
 import { 
   INITIAL_USERS, 
@@ -408,17 +410,63 @@ class StorageService {
         bulan_pengukuran: item.bulan_pengukuran || 'Oktober 2026',
         posyandu: item.posyandu || 'Posyandu Mawar I',
         kelurahan_id: item.kelurahan_id,
-        kelurahan_nama: item.kelurahan_nama,
+        kelurahan_nama: item.kelurahan_nama || 'Kelurahan Pulau Tidung',
         nik: item.nik || '',
+        usia: item.usia || '24 Bulan',
+        tanggal_ukur: item.tanggal_ukur || item.tanggal_pantau_terakhir || this.getTodayFormatted(),
+        cara_ukur: item.cara_ukur || 'Berdiri',
+        zscore_bbtb: item.zscore_bbtb || '-1.50 SD',
+        status_gizi_bbtb: item.status_gizi_bbtb || item.kategori_masalah_terakhir || 'Gizi Baik (Normal)',
+        zscore_tbu: item.zscore_tbu || '-1.00 SD',
+        status_gizi_tbu: item.status_gizi_tbu || 'Normal',
+        zscore_bbu: item.zscore_bbu || '-1.20 SD',
+        status_gizi_bbu: item.status_gizi_bbu || 'Normal',
+        naik_berat_badan: item.naik_berat_badan || 'T',
+        keterangan_naik_bb: item.keterangan_naik_bb || 'T (Tidak Naik)',
+        status_outlier_who: item.status_outlier_who || 'Normal',
         nama_ortu: item.nama_ortu || '',
-        no_wa_ortu: item.no_wa_ortu || '',
+        no_wa_ortu: item.no_wa_ortu || item.no_hp || '',
+        no_hp: item.no_hp || item.no_wa_ortu || '',
         alamat: item.alamat || '',
         rt_rw: item.rt_rw || '',
+        wilayah_kecamatan: item.wilayah_kecamatan || 'Kepulauan Seribu Selatan',
+        puskesmas_pustu: item.puskesmas_pustu || pulau?.unit_pelayanan || 'Puskesmas Kepulauan Seribu Selatan',
         lila: item.lila
       };
 
       currentList.unshift(newSasaran);
       imported.push(newSasaran);
+
+      // Sesuai permintaan: Balita bermasalah gizi yang diimpor otomatis masuk ke Daftar Tindak Lanjut lintas sektor
+      const isBermasalah = newSasaran.kategori_masalah_terakhir && 
+        !newSasaran.kategori_masalah_terakhir.includes('Normal') && 
+        !newSasaran.kategori_masalah_terakhir.includes('Baik');
+
+      if (isBermasalah) {
+        const tenggatDate = new Date();
+        tenggatDate.setDate(tenggatDate.getDate() + 14);
+        const tenggatStr = `${String(tenggatDate.getDate()).padStart(2, '0')}/${String(tenggatDate.getMonth() + 1).padStart(2, '0')}/${tenggatDate.getFullYear()}`;
+
+        const newTL: TindakLanjut = {
+          tindak_lanjut_id: `TL-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+          sasaran_id: newSasaran.sasaran_id,
+          kategori: `Penanganan ${newSasaran.kategori_masalah_terakhir} - ${newSasaran.posyandu || 'Posyandu'}`,
+          rencana_intervensi: `Pendampingan intensif lintas sektor, monitoring antropometri berkala, edukasi gizi seimbang keluarga, dan intervensi pemulihan.`,
+          tanggal_rencana: this.getTodayFormatted(),
+          tenggat: tenggatStr,
+          petugas_id: 'USR-003', // Tenaga Gizi PJ
+          status: 'Belum ditindaklanjuti',
+          prioritas: 'Tinggi',
+          is_from_posyandu: true,
+          posyandu_nama: newSasaran.posyandu,
+          kelurahan_nama: newSasaran.kelurahan_nama || pulau?.nama_pulau,
+          tindak_lanjut_lintas_sektor: [],
+          catatan: `Import data balita bermasalah gizi (${newSasaran.kategori_masalah_terakhir}). BB: ${newSasaran.bb_terakhir}kg, TB: ${newSasaran.tb_terakhir}cm, LiLA: ${newSasaran.lila || '-'}cm. Posyandu: ${newSasaran.posyandu || '-'}. Ortu: ${newSasaran.nama_ortu || '-'} (${newSasaran.no_wa_ortu || '-'}).`,
+          created_at: this.getTodayFormatted(),
+          updated_at: this.getTodayFormatted()
+        };
+        this.saveTindakLanjut(newTL);
+      }
     });
 
     localStorage.setItem(STORAGE_KEYS.SASARAN, JSON.stringify(currentList));
@@ -516,6 +564,65 @@ class StorageService {
 
     localStorage.setItem(STORAGE_KEYS.KENDALA, JSON.stringify(list));
     return saved;
+  }
+
+  public deleteKendala(id: string): boolean {
+    const list = this.getKendalaList();
+    const filtered = list.filter(k => k.kendala_id !== id);
+    localStorage.setItem(STORAGE_KEYS.KENDALA, JSON.stringify(filtered));
+    this.addLog('CANCEL', 'KENDALA', id, `Kendala ${id} dihapus dari daftar kendala`, 'WARNING');
+    return true;
+  }
+
+  public saveKendalaFromTindakLanjut(tlId: string, data: {
+    kategori: KategoriKendala | string;
+    kendala_detail: string;
+    rencana_penyelesaian?: string;
+    status?: StatusKendala;
+  }): { savedKendala: Kendala; updatedTL?: TindakLanjut } {
+    const tlList = this.getTindakLanjutList();
+    const tlIndex = tlList.findIndex(t => t.tindak_lanjut_id === tlId);
+    let targetTL: TindakLanjut | undefined;
+
+    if (tlIndex >= 0) {
+      tlList[tlIndex] = {
+        ...tlList[tlIndex],
+        kendala_kategori: data.kategori,
+        kendala_detail: data.kendala_detail,
+        kendala_status: data.status === 'Selesai' ? 'Terselesaikan' : 'Ada Kendala',
+        updated_at: this.getTodayFormatted()
+      };
+      targetTL = tlList[tlIndex];
+      this.safeSetItem(STORAGE_KEYS.TINDAK_LANJUT, JSON.stringify(tlList));
+    }
+
+    const sasaran = targetTL ? this.getSasaranById(targetTL.sasaran_id) : undefined;
+    const currentUser = this.getCurrentUser();
+
+    const newKendala: Kendala = {
+      kendala_id: `KND-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      tanggal_kejadian: this.getTodayFormatted(),
+      pulau_id: sasaran?.pulau_id || 'PULAU-01',
+      kategori: data.kategori,
+      deskripsi: `Kendala tindak lanjut ${targetTL?.tindak_lanjut_id || ''}: ${data.kategori}`,
+      kendala_detail: data.kendala_detail,
+      dampak: `Menghambat efektivitas intervensi penanganan gizi balita ${sasaran?.inisial || targetTL?.sasaran_id || ''}.`,
+      rencana_penyelesaian: data.rencana_penyelesaian || 'Koordinasi lintas sektor untuk bantuan dan pendampingan terpadu.',
+      penanggung_jawab: `${currentUser.nama} (${currentUser.unit || currentUser.role})`,
+      tenggat: targetTL?.tenggat || this.getTodayFormatted(),
+      status: data.status || 'Dalam proses',
+      sasaran_terkait_kode: sasaran?.kode_sasaran || targetTL?.sasaran_id,
+      sasaran_id: targetTL?.sasaran_id,
+      tindak_lanjut_id: tlId,
+      pelapor_nama: currentUser.nama,
+      pelapor_sektor: currentUser.unit || currentUser.role,
+      catatan_tindak_lanjut: `Dilaporkan melalui Daftar Tindak Lanjut: ${data.kendala_detail}`,
+      created_at: this.getTodayFormatted(),
+      updated_at: this.getTodayFormatted()
+    };
+
+    const savedK = this.saveKendala(newKendala);
+    return { savedKendala: savedK, updatedTL: targetTL };
   }
 
   // --- Lintas Sektor ---
